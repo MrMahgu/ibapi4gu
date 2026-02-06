@@ -7,6 +7,7 @@ Cmake preset build instructions
 - IBKR TWS API: 1043.02
 - Protobuf: 5.29.5
 - IntelRDFPMathLib: 2.3
+- Boost 1.90.0
 
 `linux-gcc` uses the Windows IBAPI sources. If you want the Linux IBAPI sources, use `unix-gcc` and set `IBAPI_PROTOBUF_VERSION=3.12.4` during the initial configure (see below).
 
@@ -47,6 +48,8 @@ Example output:
 Linux (`build/linux-gcc/rundir/bin/gw_scanner`):
 ```
 [scanner]
+boost version: 1.90.0
+boost hw_concurrency: 16
 ibkr twsapi version: 1043.02
 ibkr client version: 66
 protobuf version: 5.29.5
@@ -56,6 +59,8 @@ ibkr socket ok: no
 Windows (`.\build\win-msvc\rundir\bin\gw_scanner.exe`):
 ```
 [scanner]
+boost version: 1.90.0
+boost hw_concurrency: 16
 ibkr twsapi version: 1043.02
 ibkr client version: 66
 protobuf version: 5.29.5
@@ -73,6 +78,8 @@ Example output:
 Linux/Unix (unix-gcc on Ubuntu, `build/unix-gcc/rundir/bin/gw_scanner`):
 ```
 [scanner]
+boost version: 1.90.0
+boost hw_concurrency: 4
 ibkr twsapi version: 1043.02
 ibkr client version: 66
 protobuf version: 3.12.4
@@ -103,6 +110,8 @@ Example output:
 Windows(.\build\win-msvc-vs\runtdir\bin\gw_scanner.exe)
 ```
 [scanner]
+boost version: 1.90.0
+boost hw_concurrency: 16
 ibkr twsapi version: 1043.02
 ibkr client version: 66
 protobuf version: 5.29.5
@@ -120,6 +129,7 @@ cmake --build --preset linux-gcc
 **Notes**
 
 - `IBKR_FETCH_TWSAPI` is required when you want to download/extract the TWS API source for the first time or re-fetch it.
+- `IBKR_BOOST_VERSION` selects the Boost version used by the build.
 - `IBAPI_PROTOBUF_VERSION` selects the Protobuf version used by the build.
 - Presets are configured to use Ninja and Ninja Multi-Config.
 - Boost and Protobuf may take up to 5 minutes or more to download.
