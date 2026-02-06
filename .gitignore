@@ -1,0 +1,74 @@
+# Build outputs
+/build/
+/build-*/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+*.cmake.user
+#*.cmake
+
+# Visual Studio / MSBuild
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vcxproj.*.user
+*.suo
+*.user
+*.userosscache
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+
+# Ninja
+.ninja_deps
+.ninja_log
+
+# Makefiles
+Makefile
+
+# LLVM/Clang
+*.dSYM/
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exp
+*.dll
+*.exe
+*.iobj
+*.ipdb
+*.pch
+*.idb
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# FetchContent / deps
+_deps/
+**/_deps/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# IB API generated/extra
+TwsSocketClient.ncb
+TwsSocketClient.suo

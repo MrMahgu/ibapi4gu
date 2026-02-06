@@ -1,0 +1,103 @@
+{
+    "version": 8,
+
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28,
+        "patch": 3
+    },
+
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "win-msvc",
+            "displayName": "Windows (MSVC)",
+            "inherits": "base",
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-msvc.cmake",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release;MinSizeRel"
+            }
+        },
+        {
+            "name": "win-msvc-vs",
+            "displayName": "Windows (MSVC) VS",
+            "inherits": "base",
+            "generator": "Visual Studio 17 2022",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-msvc.cmake",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release;MinSizeRel"
+            }
+        },
+        {
+            "name": "linux-gcc",
+            "displayName": "Linux Ubuntu (GCC)",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "unix-gcc",
+            "displayName": "Linux Ubuntu (GCC)",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
+                "CMAKE_BUILD_TYPE": "Release",
+                "FORCE_UNIX_SOURCE": "ON"
+            }
+        }
+    ],
+
+    "buildPresets": [
+        {
+            "name": "win-msvc",
+            "configurePreset": "win-msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "win-msvc-vs",
+            "configurePreset": "win-msvc-vs",
+            "configuration": "Release"
+        },
+        {
+            "name": "win-msvc-debug",
+            "configurePreset": "win-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc",
+            "configurePreset": "linux-gcc"
+        },
+        {
+            "name": "unix-gcc",
+            "configurePreset": "unix-gcc"
+        }
+    ],
+
+    "testPresets": [
+        {
+            "name": "win-msvc",
+            "configurePreset": "win-msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc",
+            "configurePreset": "linux-gcc"
+        },
+        {
+            "name": "unix-gcc",
+            "configurePreset": "unix-gcc"
+        }
+    ]
+}
