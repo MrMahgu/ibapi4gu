@@ -4,7 +4,7 @@ Cmake preset build instructions
 
 **Defaults** (win, wsl, linux)
 
-- IBKR TWS API: 1043.02
+- IBKR TWS API: 1044.01
 - Protobuf: 5.29.5
 - IntelRDFPMathLib: 2.3
 
@@ -114,6 +114,16 @@ ibkr socket ok: no
 You can drop `IBKR_FETCH_TWSAPI` and `IBAPI_PROTOBUF_VERSION` once they have been fetched/configured:
 ```bash
 cmake --preset linux-gcc
+cmake --build --preset linux-gcc
+```
+
+**Changing IBAPI verison**
+
+You can change the version of IBKR API during configure if it's already cached
+
+WSL / Linux:
+```bash
+cmake --preset linux-gcc -DIBKR_FETCH_TWSAPI=ON -DIBKR_TWSAPI_VERSION="1044.01"
 cmake --build --preset linux-gcc
 ```
 

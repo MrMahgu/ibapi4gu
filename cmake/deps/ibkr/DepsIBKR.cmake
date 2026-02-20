@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 include(ExternalProject)
 
-set(IBKR_TWSAPI_VERSION "1043.02" CACHE STRING "IBKR TWS API version (e.g. 1043.02)")
+set(IBKR_TWSAPI_VERSION "1044.01" CACHE STRING "IBKR TWS API version (e.g. 1044.01)")
 set(IBKR_FETCH_TWSAPI  OFF        CACHE BOOL   "Allow fetching/extracting/building IBKR TWS API during build")
 
 # Default MSI everywhere; on WSL/Linux, you may opt into ZIP:
