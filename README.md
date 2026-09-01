@@ -4,7 +4,7 @@ Cmake preset build instructions
 
 **Defaults** (win, wsl, linux)
 
-- IBKR TWS API: 1049.02
+- IBKR TWS API: 1050.01
 - Protobuf: 5.29.5
 - IntelRDFPMathLib: 2.3
 
@@ -47,7 +47,7 @@ Example output:
 Linux (`build/linux-gcc/rundir/bin/gw_scanner`):
 ```
 [scanner]
-ibkr twsapi version: 1049.02
+ibkr twsapi version: 1050.01
 ibkr client version: 66
 protobuf version: 5.29.5
 ibkr socket ok: no
@@ -56,7 +56,7 @@ ibkr socket ok: no
 Windows (`.\build\win-msvc\rundir\bin\gw_scanner.exe`):
 ```
 [scanner]
-ibkr twsapi version: 1049.02
+ibkr twsapi version: 1050.01
 ibkr client version: 66
 protobuf version: 5.29.5
 ibkr socket ok: no
@@ -73,7 +73,7 @@ Example output:
 Linux/Unix (unix-gcc on Ubuntu, `build/unix-gcc/rundir/bin/gw_scanner`):
 ```
 [scanner]
-ibkr twsapi version: 1049.02
+ibkr twsapi version: 1050.01
 ibkr client version: 66
 protobuf version: 3.12.4
 ibkr socket ok: no
@@ -103,7 +103,7 @@ Example output:
 Windows(.\build\win-msvc-vs\runtdir\bin\gw_scanner.exe)
 ```
 [scanner]
-ibkr twsapi version: 1049.02
+ibkr twsapi version: 1050.01
 ibkr client version: 66
 protobuf version: 5.29.5
 ibkr socket ok: no
@@ -123,7 +123,7 @@ You can change the version of IBKR API during configure if it's already cached
 
 WSL / Linux:
 ```bash
-cmake --preset linux-gcc -DIBKR_FETCH_TWSAPI=ON -DIBKR_TWSAPI_VERSION="1049.02"
+cmake --preset linux-gcc -DIBKR_FETCH_TWSAPI=ON -DIBKR_TWSAPI_VERSION="1050.01"
 cmake --build --preset linux-gcc
 ```
 
