@@ -1,103 +1,159 @@
 {
-    "version": 8,
-
-    "cmakeMinimumRequired": {
-        "major": 3,
-        "minor": 28,
-        "patch": 3
+  "version": 8,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 3
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "IBAPI4GU_BUILD_EXAMPLES": "ON"
+      }
     },
-
-    "configurePresets": [
-        {
-            "name": "base",
-            "hidden": true,
-            "binaryDir": "${sourceDir}/build/${presetName}",
-            "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-            }
-        },
-        {
-            "name": "win-msvc",
-            "displayName": "Windows (MSVC)",
-            "inherits": "base",
-            "generator": "Ninja Multi-Config",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-msvc.cmake",
-                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release;MinSizeRel"
-            }
-        },
-        {
-            "name": "win-msvc-vs",
-            "displayName": "Windows (MSVC) VS",
-            "inherits": "base",
-            "generator": "Visual Studio 17 2022",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-msvc.cmake",
-                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release;MinSizeRel"
-            }
-        },
-        {
-            "name": "linux-gcc",
-            "displayName": "Linux Ubuntu (GCC)",
-            "inherits": "base",
-            "generator": "Ninja",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
-                "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
-            "name": "unix-gcc",
-            "displayName": "Linux Ubuntu (GCC)",
-            "inherits": "base",
-            "generator": "Ninja",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
-                "CMAKE_BUILD_TYPE": "Release",
-                "FORCE_UNIX_SOURCE": "ON"
-            }
-        }
-    ],
-
-    "buildPresets": [
-        {
-            "name": "win-msvc",
-            "configurePreset": "win-msvc",
-            "configuration": "Release"
-        },
-        {
-            "name": "win-msvc-vs",
-            "configurePreset": "win-msvc-vs",
-            "configuration": "Release"
-        },
-        {
-            "name": "win-msvc-debug",
-            "configurePreset": "win-msvc",
-            "configuration": "Debug"
-        },
-        {
-            "name": "linux-gcc",
-            "configurePreset": "linux-gcc"
-        },
-        {
-            "name": "unix-gcc",
-            "configurePreset": "unix-gcc"
-        }
-    ],
-
-    "testPresets": [
-        {
-            "name": "win-msvc",
-            "configurePreset": "win-msvc",
-            "configuration": "Release"
-        },
-        {
-            "name": "linux-gcc",
-            "configurePreset": "linux-gcc"
-        },
-        {
-            "name": "unix-gcc",
-            "configurePreset": "unix-gcc"
-        }
-    ]
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-gcc",
+      "displayName": "Linux GCC (native Unix sources)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "IBAPI4GU_IBKR_DISTRIBUTION": "UNIX"
+      }
+    },
+    {
+      "name": "linux-gcc-msi",
+      "displayName": "Linux/WSL GCC (Windows sources)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS",
+        "IBAPI4GU_NTDDI_VERSION": "0x0A000000",
+        "IBAPI4GU_WIN32_WINNT": "0x0A00"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC (Ninja Multi-Config)",
+      "inherits": "windows-base",
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "windows-vs2026",
+      "displayName": "Windows Visual Studio 2026",
+      "inherits": "windows-base",
+      "generator": "Visual Studio 18 2026",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-gcc",
+      "configurePreset": "linux-gcc"
+    },
+    {
+      "name": "linux-gcc-msi",
+      "configurePreset": "linux-gcc-msi"
+    },
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs2026",
+      "configurePreset": "windows-vs2026",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-gcc",
+      "configurePreset": "linux-gcc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-msi",
+      "configurePreset": "linux-gcc-msi",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-vs2026",
+      "configurePreset": "windows-vs2026",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "linux-gcc",
+      "steps": [
+        { "type": "configure", "name": "linux-gcc" },
+        { "type": "build", "name": "linux-gcc" },
+        { "type": "test", "name": "linux-gcc" }
+      ]
+    },
+    {
+      "name": "linux-gcc-msi",
+      "steps": [
+        { "type": "configure", "name": "linux-gcc-msi" },
+        { "type": "build", "name": "linux-gcc-msi" },
+        { "type": "test", "name": "linux-gcc-msi" }
+      ]
+    },
+    {
+      "name": "windows-msvc",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc" },
+        { "type": "build", "name": "windows-msvc" },
+        { "type": "test", "name": "windows-msvc" }
+      ]
+    },
+    {
+      "name": "windows-vs2026",
+      "steps": [
+        { "type": "configure", "name": "windows-vs2026" },
+        { "type": "build", "name": "windows-vs2026" },
+        { "type": "test", "name": "windows-vs2026" }
+      ]
+    }
+  ]
 }

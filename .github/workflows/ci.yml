@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux native / current CMake
+            preset: linux-gcc
+            minimum_cmake: false
+            needs_msitools: false
+          - name: Linux MSI / current CMake
+            preset: linux-gcc-msi
+            minimum_cmake: false
+            needs_msitools: true
+          - name: Linux native / CMake 3.28.3
+            preset: linux-gcc
+            minimum_cmake: true
+            needs_msitools: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential ninja-build ca-certificates
+      - name: Install MSI extraction support
+        if: matrix.needs_msitools
+        run: sudo apt-get install --yes msitools
+      - uses: actions/setup-python@v5
+        if: matrix.minimum_cmake
+        with:
+          python-version: "3.x"
+      - name: Install minimum CMake
+        if: matrix.minimum_cmake
+        run: python -m pip install cmake==3.28.3
+      - name: Configure, build, and test
+        run: cmake --workflow --preset "${{ matrix.preset }}"
+
+  windows:
+    name: Windows / Visual Studio 2026
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure, build, and test
+        run: cmake --workflow --preset windows-vs2026

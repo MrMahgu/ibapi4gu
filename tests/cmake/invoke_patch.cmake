@@ -1,0 +1,6 @@
+include("${IBAPI4GU_SOURCE_DIR}/cmake/deps/ibkr/PatchDecimal.cmake")
+ibapi4gu_create_patched_decimal(
+  "${IBAPI4GU_INPUT}"
+  "${IBAPI4GU_OUTPUT}"
+  "0000000000000000000000000000000000000000000000000000000000000000"
+)

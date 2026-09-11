@@ -1,8 +1,8 @@
-function(project_warnings_setup)
-  add_library(project_warnings INTERFACE)
+function(ibapi4gu_project_warnings_setup)
+  add_library(ibapi4gu_project_warnings INTERFACE)
 
   if(MSVC)
-    target_compile_options(project_warnings INTERFACE
+    target_compile_options(ibapi4gu_project_warnings INTERFACE
       /W4
       /w14242 /w14254 /w14263 /w14265 /w14287
       /we4289
@@ -11,8 +11,8 @@ function(project_warnings_setup)
       /w14555 /w14619 /w14640 /w14826 /w14905 /w14906 /w14928
     )
   else()
-    target_compile_options(project_warnings INTERFACE
+    target_compile_options(ibapi4gu_project_warnings INTERFACE
       -Wall -Wextra -Wpedantic
     )
-  endif()  
+  endif()
 endfunction()
