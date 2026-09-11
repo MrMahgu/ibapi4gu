@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.28.3...4.4)
 
 project(ibapi4gu VERSION 0.1.0 LANGUAGES C CXX)
 
+# Keep the language mode consistent across dependencies as well as consumers.
+# Abseil's auto-selected compatibility types are ABI-sensitive; in particular,
+# MSVC's default C++14 mode otherwise disagrees with our C++20 IBKR objects.
+if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 20)
+  set(CMAKE_CXX_STANDARD 20)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 
