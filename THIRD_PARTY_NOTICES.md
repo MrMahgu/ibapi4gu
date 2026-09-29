@@ -7,7 +7,7 @@ licenses and terms.
 ## Interactive Brokers TWS API
 
 - Source: <https://interactivebrokers.github.io/>
-- Pinned release: API 10.50.02
+- Pinned release: API 10.51.01
 - The bundled C++ sources contain Interactive Brokers LLC copyright notices
   and GNU General Public License, version 3 or later, headers.
 - Use of the TWS API is also subject to the terms presented by Interactive
@@ -20,7 +20,7 @@ original source matches the reviewed release hash.
 ## Protocol Buffers
 
 - Source: <https://github.com/protocolbuffers/protobuf>
-- Pinned releases: 5.29.5 and 3.12.4
+- Pinned release: 5.29.5
 - License: BSD 3-Clause; see the `LICENSE` file in each downloaded archive.
 
 ## Abseil C++

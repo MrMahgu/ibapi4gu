@@ -16,27 +16,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux native / current CMake
+          - name: Linux / current CMake
             preset: linux-gcc
             minimum_cmake: false
-            needs_msitools: false
-          - name: Linux MSI / current CMake
-            preset: linux-gcc-msi
-            minimum_cmake: false
-            needs_msitools: true
-          - name: Linux native / CMake 3.28.3
+          - name: Linux / CMake 3.28.3
             preset: linux-gcc
             minimum_cmake: true
-            needs_msitools: false
     steps:
       - uses: actions/checkout@v7
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential ninja-build ca-certificates
-      - name: Install MSI extraction support
-        if: matrix.needs_msitools
-        run: sudo apt-get install --yes msitools
       - uses: actions/setup-python@v7
         if: matrix.minimum_cmake
         with:

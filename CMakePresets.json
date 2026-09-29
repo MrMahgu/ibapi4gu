@@ -27,19 +27,8 @@
     },
     {
       "name": "linux-gcc",
-      "displayName": "Linux GCC (native Unix sources)",
-      "inherits": "linux-base",
-      "cacheVariables": {
-        "IBAPI4GU_IBKR_DISTRIBUTION": "UNIX"
-      }
-    },
-    {
-      "name": "linux-gcc-msi",
-      "displayName": "Linux/WSL GCC (Windows sources)",
-      "inherits": "linux-base",
-      "cacheVariables": {
-        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS"
-      }
+      "displayName": "Linux GCC",
+      "inherits": "linux-base"
     },
     {
       "name": "windows-base",
@@ -48,7 +37,6 @@
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
-        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS",
         "IBAPI4GU_NTDDI_VERSION": "0x0A000000",
         "IBAPI4GU_WIN32_WINNT": "0x0A00"
       }
@@ -76,10 +64,6 @@
       "configurePreset": "linux-gcc"
     },
     {
-      "name": "linux-gcc-msi",
-      "configurePreset": "linux-gcc-msi"
-    },
-    {
       "name": "windows-msvc",
       "configurePreset": "windows-msvc",
       "configuration": "Release"
@@ -94,13 +78,6 @@
     {
       "name": "linux-gcc",
       "configurePreset": "linux-gcc",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-gcc-msi",
-      "configurePreset": "linux-gcc-msi",
       "output": {
         "outputOnFailure": true
       }
@@ -129,14 +106,6 @@
         { "type": "configure", "name": "linux-gcc" },
         { "type": "build", "name": "linux-gcc" },
         { "type": "test", "name": "linux-gcc" }
-      ]
-    },
-    {
-      "name": "linux-gcc-msi",
-      "steps": [
-        { "type": "configure", "name": "linux-gcc-msi" },
-        { "type": "build", "name": "linux-gcc-msi" },
-        { "type": "test", "name": "linux-gcc-msi" }
       ]
     },
     {

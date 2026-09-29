@@ -11,7 +11,7 @@ int main() {
                   << '\n';
         return 1;
     }
-    if (std::string_view(IBAPI4GU_TWSAPI_VERSION) != "1050.02") {
+    if (std::string_view(IBAPI4GU_TWSAPI_VERSION) != "1051.01") {
         std::cerr << "unexpected IBKR version: " << IBAPI4GU_TWSAPI_VERSION
                   << '\n';
         return 1;
