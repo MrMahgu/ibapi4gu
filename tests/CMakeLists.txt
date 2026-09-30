@@ -9,7 +9,6 @@ add_test(NAME decimal-regressions COMMAND ibapi4gu_decimal_test)
 add_executable(ibapi4gu_smoke_test smoke_test.cpp)
 target_link_libraries(ibapi4gu_smoke_test PRIVATE
   ibapi4gu::twsapi
-  ibapi4gu_project_options
   ibapi4gu_project_warnings
 )
 target_compile_definitions(ibapi4gu_smoke_test PRIVATE

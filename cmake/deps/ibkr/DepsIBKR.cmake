@@ -163,7 +163,9 @@ endforeach()
 target_include_directories(ibapi4gu_twsapi SYSTEM PUBLIC
   ${_ibapi4gu_public_include_directories}
 )
-target_compile_features(ibapi4gu_twsapi PUBLIC cxx_std_20)
+target_compile_features(ibapi4gu_twsapi PUBLIC
+  ${IBAPI4GU_CXX_COMPILE_FEATURE}
+)
 target_compile_definitions(ibapi4gu_twsapi
   PUBLIC IBAPI4GU_TWSAPI_VERSION="${IBAPI4GU_IBKR_VERSION}"
   PRIVATE

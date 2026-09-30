@@ -4,7 +4,7 @@ file(REMOVE_RECURSE "${_superproject_source}")
 file(MAKE_DIRECTORY "${_superproject_source}")
 
 set(_superproject_cmake [=[
-cmake_minimum_required(VERSION 3.28.3)
+cmake_minimum_required(VERSION 4.2)
 project(ibapi4gu_parent_smoke LANGUAGES C CXX)
 
 set(protobuf_BUILD_TESTS ON CACHE BOOL "parent sentinel")

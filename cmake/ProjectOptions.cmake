@@ -1,7 +1,9 @@
 function(ibapi4gu_project_options_setup)
   add_library(ibapi4gu_project_options INTERFACE)
 
-  target_compile_features(ibapi4gu_project_options INTERFACE cxx_std_20)
+  target_compile_features(ibapi4gu_project_options INTERFACE
+    ${IBAPI4GU_CXX_COMPILE_FEATURE}
+  )
 
   target_compile_definitions(ibapi4gu_project_options INTERFACE
     $<$<BOOL:${WIN32}>:NOMINMAX>

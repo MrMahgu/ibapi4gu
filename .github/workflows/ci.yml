@@ -18,25 +18,26 @@ jobs:
         include:
           - name: Linux / current CMake
             preset: linux-gcc
-            minimum_cmake: false
-          - name: Linux / CMake 3.28.3
+            cmake_spec: "cmake>=4.2,<5"
+          - name: Linux / CMake 4.2.0
             preset: linux-gcc
-            minimum_cmake: true
+            cmake_spec: "cmake==4.2.0"
     steps:
       - uses: actions/checkout@v7
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential ninja-build ca-certificates
+          sudo apt-get install --yes build-essential gcc-14 g++-14 ninja-build ca-certificates
       - uses: actions/setup-python@v7
-        if: matrix.minimum_cmake
         with:
           python-version: "3.x"
-      - name: Install minimum CMake
-        if: matrix.minimum_cmake
-        run: python -m pip install cmake==3.28.3
+      - name: Install CMake
+        run: python -m pip install "${{ matrix.cmake_spec }}"
       - name: Configure, build, and test
         run: cmake --workflow --preset "${{ matrix.preset }}"
+        env:
+          CC: gcc-14
+          CXX: g++-14
 
   windows:
     name: Windows / Visual Studio 2026

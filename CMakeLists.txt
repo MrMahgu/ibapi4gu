@@ -1,12 +1,20 @@
-cmake_minimum_required(VERSION 3.28.3...4.4)
+cmake_minimum_required(VERSION 4.2...4.4)
 
 project(ibapi4gu VERSION 0.1.0 LANGUAGES C CXX)
 
 # Keep the language mode consistent across dependencies as well as consumers.
 # Abseil's auto-selected compatibility types are ABI-sensitive; in particular,
-# MSVC's default C++14 mode otherwise disagrees with our C++20 IBKR objects.
-if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 20)
-  set(CMAKE_CXX_STANDARD 20)
+# MSVC's default C++14 mode otherwise disagrees with our IBKR objects. Current
+# CMake releases do not model MSVC C++26 yet, but their cxx_std_23 feature maps
+# to the compiler's /std:c++latest mode.
+if(MSVC)
+  set(CMAKE_CXX_STANDARD 23)
+  set(IBAPI4GU_CXX_COMPILE_FEATURE cxx_std_23)
+else()
+  if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 26)
+    set(CMAKE_CXX_STANDARD 26)
+  endif()
+  set(IBAPI4GU_CXX_COMPILE_FEATURE cxx_std_26)
 endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

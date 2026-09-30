@@ -22,24 +22,25 @@ the selected Protobuf version.
 Install the standard native build tools:
 
 ```bash
-sudo apt install git build-essential cmake ninja-build ca-certificates
+sudo apt install git build-essential gcc-14 g++-14 ninja-build ca-certificates
 ```
 
-No system Boost, Protobuf, `protoc`, or `unzip` package is required. The minimum
-supported CMake version is 3.28.3 and the compiler must support C++20 (GCC 13+
-is the tested baseline).
+Install CMake 4.2 or newer from Kitware when the distribution package is older.
+No system Boost, Protobuf, `protoc`, or `unzip` package is required. The
+compiler must support C++26 (GCC 14+ is the tested baseline).
 
 ## Build and test
 
 The Linux preset uses IBKR's unified cross-platform source archive:
 
 ```bash
-cmake --workflow --preset linux-gcc
+CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc
 ```
 
 On Windows, install Visual Studio 2026 with Desktop development with C++,
-CMake 4.2 or newer, and the Windows 11 SDK. Choose Ninja Multi-Config or the
-Visual Studio generator:
+CMake 4.2 or newer, and the Windows 11 SDK. C++26 support currently uses
+MSVC's preview `/std:c++latest` mode. Choose Ninja Multi-Config or the Visual
+Studio generator:
 
 ```powershell
 cmake --workflow --preset windows-msvc
