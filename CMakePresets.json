@@ -45,6 +45,17 @@
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "unix-gcc",
+            "displayName": "Linux Ubuntu (GCC)",
+            "inherits": "base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/toolchain-linux.cmake",
+                "CMAKE_BUILD_TYPE": "Release",
+                "FORCE_UNIX_SOURCE": "ON"
+            }
         }
     ],
 
@@ -67,6 +78,10 @@
         {
             "name": "linux-gcc",
             "configurePreset": "linux-gcc"
+        },
+        {
+            "name": "unix-gcc",
+            "configurePreset": "unix-gcc"
         }
     ],
 
@@ -79,6 +94,10 @@
         {
             "name": "linux-gcc",
             "configurePreset": "linux-gcc"
+        },
+        {
+            "name": "unix-gcc",
+            "configurePreset": "unix-gcc"
         }
     ]
 }

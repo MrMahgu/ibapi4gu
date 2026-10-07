@@ -8,8 +8,7 @@ Cmake preset build instructions
 - Protobuf: 5.29.5
 - IntelRDFPMathLib: 2.3
 
-The IBKR archive contains the sources for every supported platform. CMake maps
-version `1051.01` to `twsapi_1051_01.zip` when deriving the download URL.
+`linux-gcc` uses the Windows IBAPI sources. If you want the Linux IBAPI sources, use `unix-gcc` and set `IBAPI_PROTOBUF_VERSION=3.12.4` during the initial configure (see below).
 
 **Requirements (Win32)**
 
@@ -25,6 +24,7 @@ version `1051.01` to `twsapi_1051_01.zip` when deriving the download URL.
 **Requirements (wsl/linux)**
 
 - ninja
+- msitools
 - cmake 3.28.3
 - gcc 13.3.0
 
@@ -59,6 +59,23 @@ Windows (`.\build\win-msvc\rundir\bin\gw_scanner.exe`):
 ibkr twsapi version: 1051.01
 ibkr client version: 66
 protobuf version: 5.29.5
+ibkr socket ok: no
+```
+
+Linux/Unix/mac? (uses Linux IBAPI sources):
+```bash
+cmake --preset unix-gcc -DIBKR_FETCH_TWSAPI=ON -DIBAPI_PROTOBUF_VERSION=3.12.4
+cmake --build --preset unix-gcc
+```
+
+Example output:
+
+Linux/Unix (unix-gcc on Ubuntu, `build/unix-gcc/rundir/bin/gw_scanner`):
+```
+[scanner]
+ibkr twsapi version: 1051.01
+ibkr client version: 66
+protobuf version: 3.12.4
 ibkr socket ok: no
 ```
 
@@ -100,7 +117,7 @@ cmake --preset linux-gcc
 cmake --build --preset linux-gcc
 ```
 
-**Changing IBAPI version**
+**Changing IBAPI verison**
 
 You can change the version of IBKR API during configure if it's already cached
 
@@ -113,8 +130,6 @@ cmake --build --preset linux-gcc
 **Notes**
 
 - `IBKR_FETCH_TWSAPI` is required when you want to download/extract the TWS API source for the first time or re-fetch it.
-- `IBKR_TWSAPI_URL` can override the version-derived TWS API zip URL.
-- `IBKR_TWSAPI_SHA256` can verify the downloaded zip when set to its SHA-256 digest.
 - `IBAPI_PROTOBUF_VERSION` selects the Protobuf version used by the build.
 - Presets are configured to use Ninja and Ninja Multi-Config.
 - Boost and Protobuf may take up to 5 minutes or more to download.

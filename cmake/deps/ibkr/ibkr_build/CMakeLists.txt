@@ -7,17 +7,33 @@ set(IBKR_VERBOSE_LAYOUT OFF CACHE BOOL "Print layout discovery info")
 set(IBKR_PROTOBUF_INCLUDE_DIRS "" CACHE STRING "Extra include dirs for protobuf headers")
 set(IBKR_PROTOBUF_INCLUDE_DIR "" CACHE PATH "Protobuf include dir (protobuf-src/src)")
 set(IBKR_ABSEIL_INCLUDE_DIR "" CACHE PATH "Abseil include dir (abseil-cpp)")
+set(IBKR_CLIENT_PROTOBUF_DIR "" CACHE STRING "IBKR client protobuf dir (protobuf or protobufUnix)")
 
 if(NOT IBKR_EXTRACT_ROOT)
   message(FATAL_ERROR "IBKR_EXTRACT_ROOT is required")
 endif()
 
-set(IBKR_CPPCLIENT_ROOT "${IBKR_EXTRACT_ROOT}/source/CppClient")
-if(NOT EXISTS "${IBKR_CPPCLIENT_ROOT}/client/EClientSocket.cpp")
+file(GLOB_RECURSE _anchor CONFIGURE_DEPENDS
+  "${IBKR_EXTRACT_ROOT}/*/TWS API/source/cppclient/client/EClientSocket.cpp"
+  "${IBKR_EXTRACT_ROOT}/*/TWS API/source/CppClient/client/EClientSocket.cpp"
+  "${IBKR_EXTRACT_ROOT}/*/cppclient/client/EClientSocket.cpp"
+  "${IBKR_EXTRACT_ROOT}/*/CppClient/client/EClientSocket.cpp"
+  "${IBKR_EXTRACT_ROOT}/*/source/cppclient/client/EClientSocket.cpp"
+  "${IBKR_EXTRACT_ROOT}/*/source/CppClient/client/EClientSocket.cpp"
+)
+
+if(NOT _anchor)
   message(FATAL_ERROR
-    "Could not locate the IBAPI C++ client under IBKR_EXTRACT_ROOT='${IBKR_EXTRACT_ROOT}'.\n"
-    "Expected: ${IBKR_CPPCLIENT_ROOT}/client/EClientSocket.cpp")
+    "Could not locate IBAPI C++ client sources under IBKR_EXTRACT_ROOT='${IBKR_EXTRACT_ROOT}'.\n"
+    "Expected to find something like: */source/cppclient/client/EClientSocket.cpp")
 endif()
+
+list(GET _anchor 0 _anchor0)
+
+get_filename_component(_client_dir "${_anchor0}" DIRECTORY)
+get_filename_component(_cppclient_dir "${_client_dir}" DIRECTORY)
+
+set(IBKR_CPPCLIENT_ROOT "${_cppclient_dir}")
 
 if(IBKR_VERBOSE_LAYOUT)
   message(STATUS "IBKR_EXTRACT_ROOT   = ${IBKR_EXTRACT_ROOT}")
@@ -35,7 +51,15 @@ endif()
 
 add_library(ibkr_ibapi STATIC ${IBKR_IBAPI_SOURCES})
 
-set(_ibkr_client_pb_path "${IBKR_CPPCLIENT_ROOT}/client/protobuf")
+set(_ibkr_client_pb_dir "${IBKR_CLIENT_PROTOBUF_DIR}")
+if(_ibkr_client_pb_dir STREQUAL "")
+  if(EXISTS "${IBKR_CPPCLIENT_ROOT}/client/protobufUnix")
+    set(_ibkr_client_pb_dir "protobufUnix")
+  else()
+    set(_ibkr_client_pb_dir "protobuf")
+  endif()
+endif()
+set(_ibkr_client_pb_path "${IBKR_CPPCLIENT_ROOT}/client/${_ibkr_client_pb_dir}")
 if(NOT EXISTS "${_ibkr_client_pb_path}")
   message(FATAL_ERROR "IBKR client protobuf dir not found: ${_ibkr_client_pb_path}")
 endif()
@@ -46,7 +70,7 @@ target_include_directories(ibkr_ibapi
     "${IBKR_CPPCLIENT_ROOT}/client"
     "${_ibkr_client_pb_path}"
     "${IBKR_CPPCLIENT_ROOT}/client/include"
-    "${IBKR_CPPCLIENT_ROOT}/client/include/protobuf"
+    "${IBKR_CPPCLIENT_ROOT}/client/include/${_ibkr_client_pb_dir}"
     "${IBKR_CPPCLIENT_ROOT}/shared"
     "${IBKR_CPPCLIENT_ROOT}/samples"
 )
