@@ -23,6 +23,25 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "cmake")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+if(WIN32)
+  set(_ibapi4gu_default_distribution "WINDOWS")
+else()
+  set(_ibapi4gu_default_distribution "UNIX")
+endif()
+
+set(IBAPI4GU_IBKR_DISTRIBUTION "${_ibapi4gu_default_distribution}" CACHE STRING
+  "IBKR source distribution to build (UNIX or WINDOWS)"
+)
+set_property(CACHE IBAPI4GU_IBKR_DISTRIBUTION PROPERTY STRINGS UNIX WINDOWS)
+string(TOUPPER "${IBAPI4GU_IBKR_DISTRIBUTION}" IBAPI4GU_IBKR_DISTRIBUTION)
+
+if(NOT IBAPI4GU_IBKR_DISTRIBUTION MATCHES "^(UNIX|WINDOWS)$")
+  message(FATAL_ERROR
+    "IBAPI4GU_IBKR_DISTRIBUTION must be UNIX or WINDOWS, got "
+    "'${IBAPI4GU_IBKR_DISTRIBUTION}'."
+  )
+endif()
+
 option(IBAPI4GU_BUILD_EXAMPLES "Build ibapi4gu examples" ${PROJECT_IS_TOP_LEVEL})
 
 include(CTest)

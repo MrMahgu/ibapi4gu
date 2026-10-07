@@ -16,18 +16,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux / current CMake
+          - name: Linux native / current CMake
             preset: linux-gcc
             cmake_spec: "cmake>=4.2,<5"
-          - name: Linux / CMake 4.2.0
+            needs_msitools: false
+          - name: Linux MSI / current CMake
+            preset: linux-gcc-msi
+            cmake_spec: "cmake>=4.2,<5"
+            needs_msitools: true
+          - name: Linux native / CMake 4.2.0
             preset: linux-gcc
             cmake_spec: "cmake==4.2.0"
+            needs_msitools: false
     steps:
       - uses: actions/checkout@v7
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential gcc-14 g++-14 ninja-build ca-certificates
+      - name: Install MSI extraction support
+        if: matrix.needs_msitools
+        run: sudo apt-get install --yes msitools
       - uses: actions/setup-python@v7
         with:
           python-version: "3.x"

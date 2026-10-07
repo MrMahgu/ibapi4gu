@@ -20,7 +20,7 @@ original source matches the reviewed release hash.
 ## Protocol Buffers
 
 - Source: <https://github.com/protocolbuffers/protobuf>
-- Pinned release: 5.29.5
+- Pinned releases: 5.29.5 and 3.12.4
 - License: BSD 3-Clause; see the `LICENSE` file in each downloaded archive.
 
 ## Abseil C++

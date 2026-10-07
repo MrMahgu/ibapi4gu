@@ -13,10 +13,36 @@ if(NOT _ibapi4gu_system_processor MATCHES "^(amd64|x86_64|x64)$")
   )
 endif()
 
+if(WIN32 AND IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "UNIX")
+  message(FATAL_ERROR "The IBKR UNIX distribution is not supported by the Windows build.")
+endif()
+
 set(IBAPI4GU_IBKR_SOURCE_DIR "" CACHE PATH
-  "Path to an already-extracted IBKR ${IBAPI4GU_IBKR_VERSION} source tree"
+  "Path to an already-extracted IBKR ${IBAPI4GU_IBKR_VERSION} source distribution"
 )
-set(_ibapi4gu_ibkr_archive_name "twsapi-${IBAPI4GU_IBKR_VERSION}.zip")
+string(TOLOWER "${IBAPI4GU_IBKR_DISTRIBUTION}" _ibapi4gu_distribution_lower)
+
+if(IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "WINDOWS")
+  set(_ibapi4gu_ibkr_url "${IBAPI4GU_IBKR_WINDOWS_URL}")
+  set(_ibapi4gu_ibkr_sha256 "${IBAPI4GU_IBKR_WINDOWS_SHA256}")
+  set(_ibapi4gu_ibkr_archive_name "twsapi-${IBAPI4GU_IBKR_VERSION}.msi")
+  set(_ibapi4gu_ibkr_protobuf_directory
+    "${IBAPI4GU_IBKR_WINDOWS_PROTOBUF_DIR}"
+  )
+  set(_ibapi4gu_ibkr_protobuf_marker
+    "${IBAPI4GU_IBKR_WINDOWS_PROTOBUF_MARKER}"
+  )
+else()
+  set(_ibapi4gu_ibkr_url "${IBAPI4GU_IBKR_UNIX_URL}")
+  set(_ibapi4gu_ibkr_sha256 "${IBAPI4GU_IBKR_UNIX_SHA256}")
+  set(_ibapi4gu_ibkr_archive_name "twsapi-${IBAPI4GU_IBKR_VERSION}-macunix.zip")
+  set(_ibapi4gu_ibkr_protobuf_directory
+    "${IBAPI4GU_IBKR_UNIX_PROTOBUF_DIR}"
+  )
+  set(_ibapi4gu_ibkr_protobuf_marker
+    "${IBAPI4GU_IBKR_UNIX_PROTOBUF_MARKER}"
+  )
+endif()
 
 if(IBAPI4GU_IBKR_SOURCE_DIR)
   get_filename_component(_ibapi4gu_ibkr_source_root
@@ -35,17 +61,17 @@ else()
   set(_ibapi4gu_ibkr_archive
     "${_ibapi4gu_ibkr_download_directory}/${_ibapi4gu_ibkr_archive_name}"
   )
-  string(SUBSTRING "${IBAPI4GU_IBKR_SHA256}" 0 12 _ibapi4gu_ibkr_hash_prefix)
+  string(SUBSTRING "${_ibapi4gu_ibkr_sha256}" 0 12 _ibapi4gu_ibkr_hash_prefix)
   set(_ibapi4gu_ibkr_source_root
-    "${CMAKE_BINARY_DIR}/_deps/ibkr-${IBAPI4GU_IBKR_VERSION}-${_ibapi4gu_ibkr_hash_prefix}"
+    "${CMAKE_BINARY_DIR}/_deps/ibkr-${IBAPI4GU_IBKR_VERSION}-${_ibapi4gu_distribution_lower}-${_ibapi4gu_ibkr_hash_prefix}"
   )
   set(_ibapi4gu_ibkr_stamp "${_ibapi4gu_ibkr_source_root}/.ibapi4gu-extracted")
 
   file(MAKE_DIRECTORY "${_ibapi4gu_ibkr_download_directory}")
   file(DOWNLOAD
-    "${IBAPI4GU_IBKR_URL}"
+    "${_ibapi4gu_ibkr_url}"
     "${_ibapi4gu_ibkr_archive}"
-    EXPECTED_HASH "SHA256=${IBAPI4GU_IBKR_SHA256}"
+    EXPECTED_HASH "SHA256=${_ibapi4gu_ibkr_sha256}"
     TLS_VERIFY ON
     INACTIVITY_TIMEOUT 30
     TIMEOUT 300
@@ -65,13 +91,54 @@ else()
     file(REMOVE_RECURSE "${_ibapi4gu_ibkr_source_root}")
     file(MAKE_DIRECTORY "${_ibapi4gu_ibkr_source_root}")
 
-    file(ARCHIVE_EXTRACT
-      INPUT "${_ibapi4gu_ibkr_archive}"
-      DESTINATION "${_ibapi4gu_ibkr_source_root}"
-    )
+    if(IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "UNIX")
+      file(ARCHIVE_EXTRACT
+        INPUT "${_ibapi4gu_ibkr_archive}"
+        DESTINATION "${_ibapi4gu_ibkr_source_root}"
+      )
+    elseif(WIN32)
+      find_program(_ibapi4gu_msiexec NAMES msiexec REQUIRED)
+      file(TO_NATIVE_PATH "${_ibapi4gu_ibkr_archive}" _ibapi4gu_archive_native)
+      file(TO_NATIVE_PATH "${_ibapi4gu_ibkr_source_root}" _ibapi4gu_extract_native)
+      execute_process(
+        COMMAND "${_ibapi4gu_msiexec}" /a "${_ibapi4gu_archive_native}"
+          /qn "TARGETDIR=${_ibapi4gu_extract_native}"
+        RESULT_VARIABLE _ibapi4gu_extract_result
+        OUTPUT_QUIET
+        ERROR_VARIABLE _ibapi4gu_extract_error
+      )
+      if(NOT _ibapi4gu_extract_result EQUAL 0)
+        message(FATAL_ERROR
+          "msiexec failed with code ${_ibapi4gu_extract_result}: "
+          "${_ibapi4gu_extract_error}"
+        )
+      endif()
+    else()
+      find_program(_ibapi4gu_msiextract NAMES msiextract)
+      if(NOT _ibapi4gu_msiextract)
+        message(FATAL_ERROR
+          "The WINDOWS distribution on Linux requires msiextract. Install the "
+          "msitools apt package or use IBAPI4GU_IBKR_DISTRIBUTION=UNIX."
+        )
+      endif()
+      execute_process(
+        COMMAND "${_ibapi4gu_msiextract}"
+          --directory "${_ibapi4gu_ibkr_source_root}"
+          "${_ibapi4gu_ibkr_archive}"
+        RESULT_VARIABLE _ibapi4gu_extract_result
+        OUTPUT_QUIET
+        ERROR_VARIABLE _ibapi4gu_extract_error
+      )
+      if(NOT _ibapi4gu_extract_result EQUAL 0)
+        message(FATAL_ERROR
+          "msiextract failed with code ${_ibapi4gu_extract_result}: "
+          "${_ibapi4gu_extract_error}"
+        )
+      endif()
+    endif()
 
     file(WRITE "${_ibapi4gu_ibkr_stamp}"
-      "${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_SHA256}\n"
+      "${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_DISTRIBUTION} ${_ibapi4gu_ibkr_sha256}\n"
     )
   endif()
 endif()
@@ -98,7 +165,7 @@ get_filename_component(_ibapi4gu_cppclient_directory
   "${_ibapi4gu_client_directory}" DIRECTORY
 )
 set(_ibapi4gu_generated_directory
-  "${_ibapi4gu_client_directory}/${IBAPI4GU_IBKR_PROTOBUF_DIR}"
+  "${_ibapi4gu_client_directory}/${_ibapi4gu_ibkr_protobuf_directory}"
 )
 
 set(_ibapi4gu_marker_header "${_ibapi4gu_generated_directory}/OrderBound.pb.h")
@@ -106,7 +173,7 @@ if(NOT EXISTS "${_ibapi4gu_marker_header}")
   message(FATAL_ERROR "IBKR generated Protobuf header not found: ${_ibapi4gu_marker_header}")
 endif()
 file(READ "${_ibapi4gu_marker_header}" _ibapi4gu_marker_contents)
-string(FIND "${_ibapi4gu_marker_contents}" "${IBAPI4GU_IBKR_PROTOBUF_MARKER}"
+string(FIND "${_ibapi4gu_marker_contents}" "${_ibapi4gu_ibkr_protobuf_marker}"
   _ibapi4gu_marker_position
 )
 if(_ibapi4gu_marker_position EQUAL -1)
@@ -130,7 +197,7 @@ endif()
 set(_ibapi4gu_decimal_source "${_ibapi4gu_client_directory}/Decimal.cpp")
 list(REMOVE_ITEM _ibapi4gu_client_sources "${_ibapi4gu_decimal_source}")
 set(_ibapi4gu_patched_decimal
-  "${CMAKE_CURRENT_BINARY_DIR}/generated/ibkr-${IBAPI4GU_IBKR_VERSION}/Decimal.cpp"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/ibkr-${IBAPI4GU_IBKR_VERSION}-${_ibapi4gu_distribution_lower}/Decimal.cpp"
 )
 ibapi4gu_create_patched_decimal(
   "${_ibapi4gu_decimal_source}"
@@ -198,6 +265,6 @@ set(IBAPI4GU_RESOLVED_IBKR_SOURCE_DIR "${_ibapi4gu_ibkr_source_root}"
 )
 
 message(STATUS
-  "ibapi4gu: IBKR ${IBAPI4GU_IBKR_VERSION}, "
+  "ibapi4gu: IBKR ${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_DISTRIBUTION}, "
   "Protobuf ${IBAPI4GU_REQUIRED_PROTOBUF_VERSION}, Intel RDFP ${IBAPI4GU_INTEL_RDFP_VERSION}"
 )

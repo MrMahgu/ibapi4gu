@@ -1,17 +1,17 @@
 # ibapi4gu
 
 Reproducible CMake integration for the Interactive Brokers C++ TWS API on
-x86-64 Linux/WSL and Windows. The project downloads a verified source archive,
-builds its exact dependency set, and exposes a single CMake target:
+x86-64 Linux/WSL and Windows. The project downloads verified source artifacts,
+builds their exact dependency set, and exposes a single CMake target:
 `ibapi4gu::twsapi`.
 
 ## Dependency baseline
 
-| Component | Version |
-| --- | --- |
-| IBKR TWS API | 10.51.01 |
-| Protobuf | 5.29.5 |
-| Intel Decimal Floating-Point Math Library | 2.0 Update 4 |
+| Component | Windows distribution | Unix distribution |
+| --- | --- | --- |
+| IBKR TWS API | 10.51.01 | 10.51.01 |
+| Protobuf | 5.29.5 | 3.12.4 |
+| Intel Decimal Floating-Point Math Library | 2.0 Update 4 | 2.0 Update 4 |
 
 IBKR bundles generated C++ files, not their `.proto` inputs, and Protobuf C++
 requires generated code and runtime versions to match exactly. Do not override
@@ -26,15 +26,28 @@ sudo apt install git build-essential gcc-14 g++-14 ninja-build ca-certificates
 ```
 
 Install CMake 4.2 or newer from Kitware when the distribution package is older.
+
+The optional Windows-source build on Linux/WSL also needs `msiextract`:
+
+```bash
+sudo apt install msitools
+```
+
 No system Boost, Protobuf, `protoc`, or `unzip` package is required. The
 compiler must support C++26 (GCC 14+ is the tested baseline).
 
 ## Build and test
 
-The Linux preset uses IBKR's unified cross-platform source archive:
+The normal Linux preset uses IBKR's native Unix source archive:
 
 ```bash
 CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc
+```
+
+To build the Windows IBKR source distribution under Linux or WSL:
+
+```bash
+CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc-msi
 ```
 
 On Windows, install Visual Studio 2026 with Desktop development with C++,
@@ -58,7 +71,7 @@ Example output:
 [ibapi4gu]
 ibkr twsapi version: 1051.01
 ibkr client version: 66
-protobuf version: 5.29.5
+protobuf version: 3.12.4
 ibkr socket ok: no
 ```
 
@@ -78,8 +91,10 @@ target_link_libraries(my_application PRIVATE ibapi4gu::twsapi)
 
 Useful configuration variables:
 
+- `IBAPI4GU_IBKR_DISTRIBUTION=UNIX|WINDOWS` selects the source package. It
+  defaults to the native package for the host.
 - `IBAPI4GU_IBKR_SOURCE_DIR=/path/to/extracted/source` skips the IBKR download
-  and uses a matching, already-extracted 10.51.01 source tree.
+  and uses a matching, already-extracted 10.51.01 distribution.
 - `IBAPI4GU_BUILD_EXAMPLES=OFF` disables the example; it already defaults off
   when this project is a subdirectory.
 - `BUILD_TESTING=OFF` disables this project's tests.
@@ -94,13 +109,14 @@ IBKR versions are deliberately not free-form cache options because source URLs,
 checksums, generated Protobuf versions, and local patches must move together.
 To adopt a new Latest API release:
 
-1. Download the official IBKR archive and calculate its SHA-256 sum.
-2. Inspect an included generated `.pb.h` and pin the corresponding exact
-   Protobuf runtime artifact and checksum.
+1. Download both official IBKR distributions and calculate their SHA-256 sums.
+2. Inspect an included generated `.pb.h` from each distribution and pin the
+   corresponding exact Protobuf runtime artifact and checksum.
 3. Review `client/Decimal.cpp`. Remove or rebase the guarded patch only after
    the decimal regression suite passes.
 4. Update `cmake/Ibapi4guRelease.cmake` as one change.
-5. Run the Linux and Windows CI matrix from clean build directories.
+5. Run the native Linux, Linux MSI, and Windows CI matrix from clean build
+   directories.
 
 ## Vendor patch and licensing
 

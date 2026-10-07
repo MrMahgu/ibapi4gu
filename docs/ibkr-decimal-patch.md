@@ -1,7 +1,7 @@
 # IBKR 10.51.01 decimal patch
 
-The unified cross-platform ZIP for IBKR API 10.51.01 contains the same
-`client/Decimal.cpp` as 10.50.02, with SHA-256:
+The Windows MSI and native Unix ZIP for IBKR API 10.51.01 contain the same
+`client/Decimal.cpp`, with SHA-256:
 
 ```text
 9fa02137f50ec7c4753b50acd46471efa852928028e02018ccc8896b1b364678

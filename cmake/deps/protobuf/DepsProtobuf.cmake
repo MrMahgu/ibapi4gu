@@ -61,7 +61,7 @@ function(_ibapi4gu_validate_existing_protobuf)
     message(FATAL_ERROR
       "ibapi4gu requires Protobuf ${IBAPI4GU_REQUIRED_PROTOBUF_VERSION} "
       "(${IBAPI4GU_REQUIRED_PROTOBUF_NUMERIC_VERSION}) for the selected IBKR "
-      "release, but an existing protobuf::libprotobuf target has an "
+      "distribution, but an existing protobuf::libprotobuf target has an "
       "unknown or different version. Protobuf C++ generated code and runtime "
       "versions must match exactly."
     )
@@ -89,32 +89,53 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 set(ABSL_BUILD_TESTING OFF)
 set(ABSL_ENABLE_INSTALL OFF)
 
-if(NOT IBAPI4GU_REQUIRED_PROTOBUF_VERSION STREQUAL "5.29.5")
+if(IBAPI4GU_REQUIRED_PROTOBUF_VERSION STREQUAL "5.29.5")
+  FetchContent_Declare(
+    abseil
+    URL "${IBAPI4GU_ABSEIL_URL}"
+    URL_HASH "SHA256=${IBAPI4GU_ABSEIL_SHA256}"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    EXCLUDE_FROM_ALL
+  )
+  FetchContent_MakeAvailable(abseil)
+
+  FetchContent_Declare(
+    protobuf
+    URL "${IBAPI4GU_PROTOBUF_5_29_5_URL}"
+    URL_HASH "SHA256=${IBAPI4GU_PROTOBUF_5_29_5_SHA256}"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    EXCLUDE_FROM_ALL
+  )
+  FetchContent_MakeAvailable(protobuf)
+elseif(IBAPI4GU_REQUIRED_PROTOBUF_VERSION STREQUAL "3.12.4")
+  FetchContent_Declare(
+    protobuf
+    URL "${IBAPI4GU_PROTOBUF_3_12_4_URL}"
+    URL_HASH "SHA256=${IBAPI4GU_PROTOBUF_3_12_4_SHA256}"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR cmake
+    EXCLUDE_FROM_ALL
+  )
+
+  # Protobuf 3.12.4 declares policy compatibility with CMake 3.1. CMake 4
+  # removed compatibility below 3.5, so raise only this third-party policy
+  # floor while leaving the dependency source untouched. Its policy floor
+  # also predates CMP0077, so explicitly make option() honor our scoped
+  # normal variables instead of changing the parent project's cache.
+  block(SCOPE_FOR VARIABLES POLICIES)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(CMAKE_WARN_DEPRECATED OFF)
+    FetchContent_MakeAvailable(protobuf)
+  endblock()
+else()
   message(FATAL_ERROR
     "No pinned source artifact for Protobuf ${IBAPI4GU_REQUIRED_PROTOBUF_VERSION}."
   )
 endif()
 
-FetchContent_Declare(
-  abseil
-  URL "${IBAPI4GU_ABSEIL_URL}"
-  URL_HASH "SHA256=${IBAPI4GU_ABSEIL_SHA256}"
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-  EXCLUDE_FROM_ALL
-)
-FetchContent_MakeAvailable(abseil)
-
-FetchContent_Declare(
-  protobuf
-  URL "${IBAPI4GU_PROTOBUF_5_29_5_URL}"
-  URL_HASH "SHA256=${IBAPI4GU_PROTOBUF_5_29_5_SHA256}"
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-  EXCLUDE_FROM_ALL
-)
-FetchContent_MakeAvailable(protobuf)
-
-# Recover the populated paths in this directory for validation and
-# local-source tests.
+# The old-Protobuf policy block deliberately scopes variables. Recover the
+# populated paths in this directory for validation and local-source tests.
 FetchContent_GetProperties(protobuf)
 
 if(NOT TARGET protobuf::libprotobuf AND TARGET libprotobuf)
