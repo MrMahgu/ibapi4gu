@@ -5,6 +5,13 @@ x86-64 Linux/WSL and Windows. The project checks out a pinned release from
 IBKR's private Git repository, builds its exact dependency set, and exposes a
 single CMake target: `ibapi4gu::twsapi`.
 
+> [!IMPORTANT]
+> Building this project requires an IBKR-authorized GitHub account with access
+> to the private
+> [`InteractiveBrokers/tws-api`](https://github.com/InteractiveBrokers/tws-api)
+> repository and an SSH key configured for that account. The public IBKR
+> installer download is not used.
+
 ## Dependency baseline
 
 | Component | Windows-generated sources | Unix-generated sources |
