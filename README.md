@@ -43,8 +43,15 @@ GitHub account and SSH key before configuring:
 git ls-remote git@github.com:InteractiveBrokers/tws-api.git refs/tags/1051.01
 ```
 
-No system Boost, Protobuf, `protoc`, or `unzip` package is required. The
-compiler must support C++26 (GCC 14+ is the tested baseline).
+No system Boost, Protobuf, `protoc`, or `unzip` package is required. C++26 is
+the default; C++11, 14, 17, 20, and 23 can also be selected. The dependency
+profile determines the oldest supported mode:
+
+| Protobuf C++ | Oldest language mode |
+| --- | --- |
+| 3.12.4 | C++11 |
+| 5.29.5 | C++14 |
+| 6.33.4 or 7.36.1 | C++17 |
 
 ## Build and test
 
@@ -57,8 +64,19 @@ CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc-pb6
 CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc-pb7
 ```
 
+Select another language mode at configure time. A build directory represents
+one language mode because Protobuf and Abseil must be compiled consistently:
+
+```bash
+cmake --preset linux-gcc-pb7 \
+  -B build/linux-gcc-pb7-cxx20 \
+  -DIBAPI4GU_CXX_STANDARD=20
+cmake --build build/linux-gcc-pb7-cxx20
+ctest --test-dir build/linux-gcc-pb7-cxx20 --output-on-failure
+```
+
 On Windows, install Visual Studio 2026 with Desktop development with C++,
-CMake 4.2 or newer, and the Windows 11 SDK. C++26 support currently uses
+CMake 4.2 or newer, and the Windows 11 SDK. When C++26 is selected, CMake uses
 MSVC's preview `/std:c++latest` mode. Choose Ninja Multi-Config or the Visual
 Studio generator:
 
@@ -99,6 +117,9 @@ target_link_libraries(my_application PRIVATE ibapi4gu::twsapi)
 
 Useful configuration variables:
 
+- `IBAPI4GU_CXX_STANDARD=11|14|17|20|23|26` selects one language mode for the
+  API, its pinned dependencies, and consumers. It defaults to `26`; profiles
+  reject modes older than their matching Protobuf runtime supports.
 - `IBAPI4GU_IBKR_DISTRIBUTION=UNIX|WINDOWS` selects the matching generated
   Protobuf source set from the checkout. It defaults to the native set for the
   host.

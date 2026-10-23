@@ -1,7 +1,6 @@
 #include <cmath>
 #include <iostream>
 #include <string>
-#include <string_view>
 
 #include <client/Decimal.h>
 
@@ -9,8 +8,8 @@ namespace {
 
 int failures = 0;
 
-void expect_display(std::string_view input, std::string_view expected) {
-    const Decimal value = DecimalFunctions::stringToDecimal(std::string(input));
+void expect_display(const std::string& input, const std::string& expected) {
+    const Decimal value = DecimalFunctions::stringToDecimal(input);
     const std::string actual = DecimalFunctions::decimalStringToDisplay(value);
     if (actual != expected) {
         std::cerr << "display(" << input << "): expected '" << expected
@@ -19,7 +18,7 @@ void expect_display(std::string_view input, std::string_view expected) {
     }
 }
 
-void expect_near(double actual, double expected, std::string_view operation) {
+void expect_near(double actual, double expected, const std::string& operation) {
     if (std::abs(actual - expected) > 1e-12) {
         std::cerr << operation << ": expected " << expected << ", got "
                   << actual << '\n';

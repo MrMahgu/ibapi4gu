@@ -13,7 +13,8 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "IBAPI4GU_BUILD_EXAMPLES": "ON"
+        "IBAPI4GU_BUILD_EXAMPLES": "ON",
+        "IBAPI4GU_CXX_STANDARD": "26"
       }
     },
     {
