@@ -91,13 +91,43 @@ downloads Protobuf, Abseil when required, and Intel RDFP. Later builds reuse
 `build/<preset>/bin` on Linux and
 `build/<preset>/bin/Release` for multi-config generators.
 
-Example output:
+### Example WSL build
 
-```text
+This is representative, abridged output from building the newest native Unix
+source profile under Ubuntu on WSL:
+
+```console
+$ CC=gcc-14 CXX=g++-14 cmake --workflow --preset linux-gcc-pb7
+Executing workflow step 1 of 3: configure preset "linux-gcc-pb7"
+
+-- ibapi4gu: IBKR 1051.01 FUTURE UNIX, Protobuf 7.36.1, C++26, Intel RDFP 2.0 Update 4
+-- Configuring done
+-- Generating done
+-- Build files have been written to: .../ibapi4gu/build/linux-gcc-pb7
+
+Executing workflow step 2 of 3: build preset "linux-gcc-pb7"
+
+[...]
+
+Executing workflow step 3 of 3: test preset "linux-gcc-pb7"
+
+Test project .../ibapi4gu/build/linux-gcc-pb7
+    Start 1: decimal-regressions
+1/4 Test #1: decimal-regressions ..............   Passed
+    Start 2: public-target-smoke
+2/4 Test #2: public-target-smoke ..............   Passed
+    Start 3: decimal-patch-guard
+3/4 Test #3: decimal-patch-guard ..............   Passed
+    Start 4: local-source-configure
+4/4 Test #4: local-source-configure ...........   Passed
+
+100% tests passed, 0 tests failed out of 4
+
+$ ./build/linux-gcc-pb7/bin/ibapi_info
 [ibapi4gu]
 ibkr twsapi version: 1051.01
 ibkr client version: 66
-protobuf version: 3.12.4
+protobuf version: 7.36.1
 ibkr socket ok: no
 ```
 
