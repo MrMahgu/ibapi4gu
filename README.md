@@ -18,8 +18,8 @@ single CMake target: `ibapi4gu::twsapi`.
 | --- | --- | --- | --- |
 | `linux-gcc-pb3` | `34bc74d` (`1051.01`) | Unix | 3.12.4 |
 | `linux-gcc-pb5` | `34bc74d` (`1051.01`) | Windows | 5.29.5 |
-| `linux-gcc-pb6` | `198ce53` (future commit) | Windows | 6.33.4 |
-| `linux-gcc-pb7` | `198ce53` (future commit) | Unix | 7.36.1 |
+| `linux-gcc-pb6` | `6232d6b` (future commit) | Windows | 6.33.4 |
+| `linux-gcc-pb7` | `6232d6b` (future commit) | Unix | 7.36.1 |
 
 Both revisions contain the `.proto` inputs and two sets of generated C++
 files. Protobuf C++ requires generated code and runtime versions to match

@@ -9,7 +9,7 @@ terms.
 - Source: <https://github.com/InteractiveBrokers/tws-api>
 - Pinned revisions: API 10.51.01 commit
   `34bc74df9f064d5bfde2ed18810f0db12a45acab` and future commit
-  `198ce538b300be86929a197f725d8335fb8273a3`
+  `6232d6bbff40c23160751f1c388075178fb8f0f1`
 - The bundled C++ sources contain Interactive Brokers LLC copyright notices
   and GNU General Public License, version 3 or later, headers.
 - Use of the TWS API is also subject to the terms presented by Interactive
