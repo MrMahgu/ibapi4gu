@@ -1,6 +1,20 @@
 include_guard(GLOBAL)
 include(${CMAKE_CURRENT_LIST_DIR}/PatchDecimal.cmake)
 
+function(_ibapi4gu_run_git description)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" ${ARGN}
+    RESULT_VARIABLE _result
+    OUTPUT_VARIABLE _output
+    ERROR_VARIABLE _error
+  )
+  if(NOT _result EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to ${description} (${_result}):\n${_output}${_error}"
+    )
+  endif()
+endfunction()
+
 if(APPLE)
   message(FATAL_ERROR "ibapi4gu currently supports x86-64 Linux/WSL and Windows, not macOS.")
 endif()
@@ -65,23 +79,20 @@ else()
     file(REMOVE_RECURSE "${_ibapi4gu_ibkr_source_root}")
     file(REMOVE "${_ibapi4gu_ibkr_checkout_stamp}")
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_deps")
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" clone
-        --depth 1
-        --branch "${IBAPI4GU_IBKR_GIT_TAG}"
-        --single-branch
-        --progress
-        "${IBAPI4GU_IBKR_GIT_REPOSITORY}"
-        "${_ibapi4gu_ibkr_source_root}"
-      RESULT_VARIABLE _ibapi4gu_ibkr_clone_result
-      ERROR_VARIABLE _ibapi4gu_ibkr_clone_error
+    _ibapi4gu_run_git("initialize the IBKR checkout"
+      init "${_ibapi4gu_ibkr_source_root}"
     )
-    if(NOT _ibapi4gu_ibkr_clone_result EQUAL 0)
-      message(FATAL_ERROR
-        "Failed to clone IBKR tag ${IBAPI4GU_IBKR_GIT_TAG} from "
-        "${IBAPI4GU_IBKR_GIT_REPOSITORY}:\n${_ibapi4gu_ibkr_clone_error}"
-      )
-    endif()
+    _ibapi4gu_run_git("configure the IBKR remote"
+      -C "${_ibapi4gu_ibkr_source_root}" remote add origin
+      "${IBAPI4GU_IBKR_GIT_REPOSITORY}"
+    )
+    _ibapi4gu_run_git("fetch IBKR revision ${IBAPI4GU_IBKR_GIT_COMMIT}"
+      -C "${_ibapi4gu_ibkr_source_root}" fetch --depth 1 origin
+      "${IBAPI4GU_IBKR_GIT_COMMIT}"
+    )
+    _ibapi4gu_run_git("check out IBKR revision ${IBAPI4GU_IBKR_GIT_COMMIT}"
+      -C "${_ibapi4gu_ibkr_source_root}" checkout --detach FETCH_HEAD
+    )
   endif()
 
   execute_process(
@@ -101,8 +112,8 @@ else()
   if(NOT "${_ibapi4gu_ibkr_revision}" STREQUAL
       "${IBAPI4GU_IBKR_GIT_COMMIT}")
     message(FATAL_ERROR
-      "IBKR tag ${IBAPI4GU_IBKR_GIT_TAG} resolved to "
-      "${_ibapi4gu_ibkr_revision}, expected ${IBAPI4GU_IBKR_GIT_COMMIT}."
+      "Fetched IBKR revision ${_ibapi4gu_ibkr_revision}, expected "
+      "${IBAPI4GU_IBKR_GIT_COMMIT}."
     )
   endif()
   file(WRITE "${_ibapi4gu_ibkr_checkout_stamp}"
@@ -232,6 +243,7 @@ set(IBAPI4GU_RESOLVED_IBKR_SOURCE_DIR "${_ibapi4gu_ibkr_source_root}"
 )
 
 message(STATUS
-  "ibapi4gu: IBKR ${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_DISTRIBUTION}, "
+  "ibapi4gu: IBKR ${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_GENERATION} "
+  "${IBAPI4GU_IBKR_DISTRIBUTION}, "
   "Protobuf ${IBAPI4GU_REQUIRED_PROTOBUF_VERSION}, Intel RDFP ${IBAPI4GU_INTEL_RDFP_VERSION}"
 )

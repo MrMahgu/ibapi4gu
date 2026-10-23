@@ -16,15 +16,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux native / current CMake
-            preset: linux-gcc
+          - name: Linux / Protobuf 3.12.4
+            preset: linux-gcc-pb3
             cmake_spec: "cmake>=4.2,<5"
-          - name: Linux modern Protobuf / current CMake
-            preset: linux-gcc-modern
+          - name: Linux / Protobuf 5.29.5
+            preset: linux-gcc-pb5
             cmake_spec: "cmake>=4.2,<5"
-          - name: Linux native / CMake 4.2.0
-            preset: linux-gcc
-            cmake_spec: "cmake==4.2.0"
+          - name: Linux / Protobuf 6.33.4
+            preset: linux-gcc-pb6
+            cmake_spec: "cmake>=4.2,<5"
+          - name: Linux / Protobuf 7.36.1
+            preset: linux-gcc-pb7
+            cmake_spec: "cmake>=4.2,<5"
     steps:
       - uses: actions/checkout@v7
       - name: Install build dependencies

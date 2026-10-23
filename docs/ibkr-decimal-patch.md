@@ -1,7 +1,7 @@
 # IBKR 10.51.01 decimal patch
 
-The private IBKR `tws-api` tag `1051.01` contains `client/Decimal.cpp` with
-SHA-256:
+The private IBKR `tws-api` tag `1051.01` and future commit `198ce538` contain
+the same `client/Decimal.cpp`, with SHA-256:
 
 ```text
 9fa02137f50ec7c4753b50acd46471efa852928028e02018ccc8896b1b364678

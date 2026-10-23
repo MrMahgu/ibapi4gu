@@ -26,19 +26,39 @@
       }
     },
     {
-      "name": "linux-gcc",
-      "displayName": "Linux GCC (native Unix sources)",
+      "name": "linux-gcc-pb3",
+      "displayName": "Linux/WSL GCC (Protobuf 3.12.4)",
       "inherits": "linux-base",
       "cacheVariables": {
-        "IBAPI4GU_IBKR_DISTRIBUTION": "UNIX"
+        "IBAPI4GU_IBKR_DISTRIBUTION": "UNIX",
+        "IBAPI4GU_IBKR_GENERATION": "STABLE"
       }
     },
     {
-      "name": "linux-gcc-modern",
-      "displayName": "Linux/WSL GCC (Protobuf 5.29.5 sources)",
+      "name": "linux-gcc-pb5",
+      "displayName": "Linux/WSL GCC (Protobuf 5.29.5)",
       "inherits": "linux-base",
       "cacheVariables": {
-        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS"
+        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS",
+        "IBAPI4GU_IBKR_GENERATION": "STABLE"
+      }
+    },
+    {
+      "name": "linux-gcc-pb6",
+      "displayName": "Linux/WSL GCC (Protobuf 6.33.4)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS",
+        "IBAPI4GU_IBKR_GENERATION": "FUTURE"
+      }
+    },
+    {
+      "name": "linux-gcc-pb7",
+      "displayName": "Linux/WSL GCC (Protobuf 7.36.1)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "IBAPI4GU_IBKR_DISTRIBUTION": "UNIX",
+        "IBAPI4GU_IBKR_GENERATION": "FUTURE"
       }
     },
     {
@@ -49,6 +69,7 @@
         "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
         "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS",
+        "IBAPI4GU_IBKR_GENERATION": "STABLE",
         "IBAPI4GU_NTDDI_VERSION": "0x0A000000",
         "IBAPI4GU_WIN32_WINNT": "0x0A00"
       }
@@ -72,12 +93,20 @@
   ],
   "buildPresets": [
     {
-      "name": "linux-gcc",
-      "configurePreset": "linux-gcc"
+      "name": "linux-gcc-pb3",
+      "configurePreset": "linux-gcc-pb3"
     },
     {
-      "name": "linux-gcc-modern",
-      "configurePreset": "linux-gcc-modern"
+      "name": "linux-gcc-pb5",
+      "configurePreset": "linux-gcc-pb5"
+    },
+    {
+      "name": "linux-gcc-pb6",
+      "configurePreset": "linux-gcc-pb6"
+    },
+    {
+      "name": "linux-gcc-pb7",
+      "configurePreset": "linux-gcc-pb7"
     },
     {
       "name": "windows-msvc",
@@ -92,15 +121,29 @@
   ],
   "testPresets": [
     {
-      "name": "linux-gcc",
-      "configurePreset": "linux-gcc",
+      "name": "linux-gcc-pb3",
+      "configurePreset": "linux-gcc-pb3",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "name": "linux-gcc-modern",
-      "configurePreset": "linux-gcc-modern",
+      "name": "linux-gcc-pb5",
+      "configurePreset": "linux-gcc-pb5",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-pb6",
+      "configurePreset": "linux-gcc-pb6",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-pb7",
+      "configurePreset": "linux-gcc-pb7",
       "output": {
         "outputOnFailure": true
       }
@@ -124,19 +167,35 @@
   ],
   "workflowPresets": [
     {
-      "name": "linux-gcc",
+      "name": "linux-gcc-pb3",
       "steps": [
-        { "type": "configure", "name": "linux-gcc" },
-        { "type": "build", "name": "linux-gcc" },
-        { "type": "test", "name": "linux-gcc" }
+        { "type": "configure", "name": "linux-gcc-pb3" },
+        { "type": "build", "name": "linux-gcc-pb3" },
+        { "type": "test", "name": "linux-gcc-pb3" }
       ]
     },
     {
-      "name": "linux-gcc-modern",
+      "name": "linux-gcc-pb5",
       "steps": [
-        { "type": "configure", "name": "linux-gcc-modern" },
-        { "type": "build", "name": "linux-gcc-modern" },
-        { "type": "test", "name": "linux-gcc-modern" }
+        { "type": "configure", "name": "linux-gcc-pb5" },
+        { "type": "build", "name": "linux-gcc-pb5" },
+        { "type": "test", "name": "linux-gcc-pb5" }
+      ]
+    },
+    {
+      "name": "linux-gcc-pb6",
+      "steps": [
+        { "type": "configure", "name": "linux-gcc-pb6" },
+        { "type": "build", "name": "linux-gcc-pb6" },
+        { "type": "test", "name": "linux-gcc-pb6" }
+      ]
+    },
+    {
+      "name": "linux-gcc-pb7",
+      "steps": [
+        { "type": "configure", "name": "linux-gcc-pb7" },
+        { "type": "build", "name": "linux-gcc-pb7" },
+        { "type": "test", "name": "linux-gcc-pb7" }
       ]
     },
     {
