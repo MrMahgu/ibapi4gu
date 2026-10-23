@@ -18,14 +18,11 @@ if(WIN32 AND IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "UNIX")
 endif()
 
 set(IBAPI4GU_IBKR_SOURCE_DIR "" CACHE PATH
-  "Path to an already-extracted IBKR ${IBAPI4GU_IBKR_VERSION} source distribution"
+  "Path to an existing IBKR ${IBAPI4GU_IBKR_VERSION} source checkout"
 )
 string(TOLOWER "${IBAPI4GU_IBKR_DISTRIBUTION}" _ibapi4gu_distribution_lower)
 
 if(IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "WINDOWS")
-  set(_ibapi4gu_ibkr_url "${IBAPI4GU_IBKR_WINDOWS_URL}")
-  set(_ibapi4gu_ibkr_sha256 "${IBAPI4GU_IBKR_WINDOWS_SHA256}")
-  set(_ibapi4gu_ibkr_archive_name "twsapi-${IBAPI4GU_IBKR_VERSION}.msi")
   set(_ibapi4gu_ibkr_protobuf_directory
     "${IBAPI4GU_IBKR_WINDOWS_PROTOBUF_DIR}"
   )
@@ -33,9 +30,6 @@ if(IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "WINDOWS")
     "${IBAPI4GU_IBKR_WINDOWS_PROTOBUF_MARKER}"
   )
 else()
-  set(_ibapi4gu_ibkr_url "${IBAPI4GU_IBKR_UNIX_URL}")
-  set(_ibapi4gu_ibkr_sha256 "${IBAPI4GU_IBKR_UNIX_SHA256}")
-  set(_ibapi4gu_ibkr_archive_name "twsapi-${IBAPI4GU_IBKR_VERSION}-macunix.zip")
   set(_ibapi4gu_ibkr_protobuf_directory
     "${IBAPI4GU_IBKR_UNIX_PROTOBUF_DIR}"
   )
@@ -55,92 +49,65 @@ if(IBAPI4GU_IBKR_SOURCE_DIR)
     )
   endif()
 else()
-  set(_ibapi4gu_ibkr_download_directory
-    "${CMAKE_BINARY_DIR}/_deps/ibapi4gu-downloads"
+  find_package(Git REQUIRED)
+  string(SUBSTRING "${IBAPI4GU_IBKR_GIT_COMMIT}" 0 12
+    _ibapi4gu_ibkr_commit_prefix
   )
-  set(_ibapi4gu_ibkr_archive
-    "${_ibapi4gu_ibkr_download_directory}/${_ibapi4gu_ibkr_archive_name}"
-  )
-  string(SUBSTRING "${_ibapi4gu_ibkr_sha256}" 0 12 _ibapi4gu_ibkr_hash_prefix)
   set(_ibapi4gu_ibkr_source_root
-    "${CMAKE_BINARY_DIR}/_deps/ibkr-${IBAPI4GU_IBKR_VERSION}-${_ibapi4gu_distribution_lower}-${_ibapi4gu_ibkr_hash_prefix}"
+    "${CMAKE_BINARY_DIR}/_deps/ibkr-${IBAPI4GU_IBKR_VERSION}-${_ibapi4gu_ibkr_commit_prefix}"
   )
-  set(_ibapi4gu_ibkr_stamp "${_ibapi4gu_ibkr_source_root}/.ibapi4gu-extracted")
-
-  file(MAKE_DIRECTORY "${_ibapi4gu_ibkr_download_directory}")
-  file(DOWNLOAD
-    "${_ibapi4gu_ibkr_url}"
-    "${_ibapi4gu_ibkr_archive}"
-    EXPECTED_HASH "SHA256=${_ibapi4gu_ibkr_sha256}"
-    TLS_VERIFY ON
-    INACTIVITY_TIMEOUT 30
-    TIMEOUT 300
-    STATUS _ibapi4gu_download_status
-    SHOW_PROGRESS
+  set(_ibapi4gu_ibkr_checkout_stamp
+    "${_ibapi4gu_ibkr_source_root}.stamp"
   )
-  list(GET _ibapi4gu_download_status 0 _ibapi4gu_download_result)
-  list(GET _ibapi4gu_download_status 1 _ibapi4gu_download_message)
-  if(NOT _ibapi4gu_download_result EQUAL 0)
-    message(FATAL_ERROR
-      "Failed to download the pinned IBKR artifact: "
-      "${_ibapi4gu_download_message}"
-    )
-  endif()
 
-  if(NOT EXISTS "${_ibapi4gu_ibkr_stamp}")
+  if(NOT EXISTS "${_ibapi4gu_ibkr_source_root}/.git"
+     OR NOT EXISTS "${_ibapi4gu_ibkr_checkout_stamp}")
     file(REMOVE_RECURSE "${_ibapi4gu_ibkr_source_root}")
-    file(MAKE_DIRECTORY "${_ibapi4gu_ibkr_source_root}")
-
-    if(IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "UNIX")
-      file(ARCHIVE_EXTRACT
-        INPUT "${_ibapi4gu_ibkr_archive}"
-        DESTINATION "${_ibapi4gu_ibkr_source_root}"
+    file(REMOVE "${_ibapi4gu_ibkr_checkout_stamp}")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_deps")
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" clone
+        --depth 1
+        --branch "${IBAPI4GU_IBKR_GIT_TAG}"
+        --single-branch
+        --progress
+        "${IBAPI4GU_IBKR_GIT_REPOSITORY}"
+        "${_ibapi4gu_ibkr_source_root}"
+      RESULT_VARIABLE _ibapi4gu_ibkr_clone_result
+      ERROR_VARIABLE _ibapi4gu_ibkr_clone_error
+    )
+    if(NOT _ibapi4gu_ibkr_clone_result EQUAL 0)
+      message(FATAL_ERROR
+        "Failed to clone IBKR tag ${IBAPI4GU_IBKR_GIT_TAG} from "
+        "${IBAPI4GU_IBKR_GIT_REPOSITORY}:\n${_ibapi4gu_ibkr_clone_error}"
       )
-    elseif(WIN32)
-      find_program(_ibapi4gu_msiexec NAMES msiexec REQUIRED)
-      file(TO_NATIVE_PATH "${_ibapi4gu_ibkr_archive}" _ibapi4gu_archive_native)
-      file(TO_NATIVE_PATH "${_ibapi4gu_ibkr_source_root}" _ibapi4gu_extract_native)
-      execute_process(
-        COMMAND "${_ibapi4gu_msiexec}" /a "${_ibapi4gu_archive_native}"
-          /qn "TARGETDIR=${_ibapi4gu_extract_native}"
-        RESULT_VARIABLE _ibapi4gu_extract_result
-        OUTPUT_QUIET
-        ERROR_VARIABLE _ibapi4gu_extract_error
-      )
-      if(NOT _ibapi4gu_extract_result EQUAL 0)
-        message(FATAL_ERROR
-          "msiexec failed with code ${_ibapi4gu_extract_result}: "
-          "${_ibapi4gu_extract_error}"
-        )
-      endif()
-    else()
-      find_program(_ibapi4gu_msiextract NAMES msiextract)
-      if(NOT _ibapi4gu_msiextract)
-        message(FATAL_ERROR
-          "The WINDOWS distribution on Linux requires msiextract. Install the "
-          "msitools apt package or use IBAPI4GU_IBKR_DISTRIBUTION=UNIX."
-        )
-      endif()
-      execute_process(
-        COMMAND "${_ibapi4gu_msiextract}"
-          --directory "${_ibapi4gu_ibkr_source_root}"
-          "${_ibapi4gu_ibkr_archive}"
-        RESULT_VARIABLE _ibapi4gu_extract_result
-        OUTPUT_QUIET
-        ERROR_VARIABLE _ibapi4gu_extract_error
-      )
-      if(NOT _ibapi4gu_extract_result EQUAL 0)
-        message(FATAL_ERROR
-          "msiextract failed with code ${_ibapi4gu_extract_result}: "
-          "${_ibapi4gu_extract_error}"
-        )
-      endif()
     endif()
+  endif()
 
-    file(WRITE "${_ibapi4gu_ibkr_stamp}"
-      "${IBAPI4GU_IBKR_VERSION} ${IBAPI4GU_IBKR_DISTRIBUTION} ${_ibapi4gu_ibkr_sha256}\n"
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" -C "${_ibapi4gu_ibkr_source_root}"
+      rev-parse HEAD
+    RESULT_VARIABLE _ibapi4gu_ibkr_revision_result
+    OUTPUT_VARIABLE _ibapi4gu_ibkr_revision
+    ERROR_VARIABLE _ibapi4gu_ibkr_revision_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(NOT _ibapi4gu_ibkr_revision_result EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to inspect the fetched IBKR revision: "
+      "${_ibapi4gu_ibkr_revision_error}"
     )
   endif()
+  if(NOT "${_ibapi4gu_ibkr_revision}" STREQUAL
+      "${IBAPI4GU_IBKR_GIT_COMMIT}")
+    message(FATAL_ERROR
+      "IBKR tag ${IBAPI4GU_IBKR_GIT_TAG} resolved to "
+      "${_ibapi4gu_ibkr_revision}, expected ${IBAPI4GU_IBKR_GIT_COMMIT}."
+    )
+  endif()
+  file(WRITE "${_ibapi4gu_ibkr_checkout_stamp}"
+    "${IBAPI4GU_IBKR_GIT_COMMIT}\n"
+  )
 endif()
 
 file(GLOB_RECURSE _ibapi4gu_socket_anchors LIST_DIRECTORIES FALSE

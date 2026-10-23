@@ -34,8 +34,8 @@
       }
     },
     {
-      "name": "linux-gcc-msi",
-      "displayName": "Linux/WSL GCC (Windows sources)",
+      "name": "linux-gcc-modern",
+      "displayName": "Linux/WSL GCC (Protobuf 5.29.5 sources)",
       "inherits": "linux-base",
       "cacheVariables": {
         "IBAPI4GU_IBKR_DISTRIBUTION": "WINDOWS"
@@ -76,8 +76,8 @@
       "configurePreset": "linux-gcc"
     },
     {
-      "name": "linux-gcc-msi",
-      "configurePreset": "linux-gcc-msi"
+      "name": "linux-gcc-modern",
+      "configurePreset": "linux-gcc-modern"
     },
     {
       "name": "windows-msvc",
@@ -99,8 +99,8 @@
       }
     },
     {
-      "name": "linux-gcc-msi",
-      "configurePreset": "linux-gcc-msi",
+      "name": "linux-gcc-modern",
+      "configurePreset": "linux-gcc-modern",
       "output": {
         "outputOnFailure": true
       }
@@ -132,11 +132,11 @@
       ]
     },
     {
-      "name": "linux-gcc-msi",
+      "name": "linux-gcc-modern",
       "steps": [
-        { "type": "configure", "name": "linux-gcc-msi" },
-        { "type": "build", "name": "linux-gcc-msi" },
-        { "type": "test", "name": "linux-gcc-msi" }
+        { "type": "configure", "name": "linux-gcc-modern" },
+        { "type": "build", "name": "linux-gcc-modern" },
+        { "type": "test", "name": "linux-gcc-modern" }
       ]
     },
     {

@@ -1,13 +1,14 @@
 # Third-party notices
 
-`ibapi4gu` downloads third-party source archives during configuration. Those
-archives are not committed to this repository and remain governed by their own
-licenses and terms.
+`ibapi4gu` fetches third-party sources during configuration. Those sources are
+not committed to this repository and remain governed by their own licenses and
+terms.
 
 ## Interactive Brokers TWS API
 
-- Source: <https://interactivebrokers.github.io/>
-- Pinned release: API 10.51.01
+- Source: <https://github.com/InteractiveBrokers/tws-api>
+- Pinned release: API 10.51.01, commit
+  `34bc74df9f064d5bfde2ed18810f0db12a45acab`
 - The bundled C++ sources contain Interactive Brokers LLC copyright notices
   and GNU General Public License, version 3 or later, headers.
 - Use of the TWS API is also subject to the terms presented by Interactive

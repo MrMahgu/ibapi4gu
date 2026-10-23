@@ -3,24 +3,19 @@ include_guard(GLOBAL)
 # A release is an indivisible set: IBKR generated C++ requires the exact
 # Protobuf runtime used to generate it. Update these values together.
 set(IBAPI4GU_IBKR_VERSION "1051.01")
+set(IBAPI4GU_IBKR_GIT_REPOSITORY
+  "git@github.com:InteractiveBrokers/tws-api.git"
+)
+set(IBAPI4GU_IBKR_GIT_TAG "1051.01")
+set(IBAPI4GU_IBKR_GIT_COMMIT
+  "34bc74df9f064d5bfde2ed18810f0db12a45acab"
+)
 
-set(IBAPI4GU_IBKR_WINDOWS_URL
-  "https://interactivebrokers.github.io/downloads/TWS%20API%20Install%201051.01.msi"
-)
-set(IBAPI4GU_IBKR_WINDOWS_SHA256
-  "b76d422a0c7d131b23d0a2dee6f2552e401bfd18586f9a82a88cbb848473ad08"
-)
 set(IBAPI4GU_IBKR_WINDOWS_PROTOBUF_DIR "protobuf")
 set(IBAPI4GU_IBKR_WINDOWS_PROTOBUF_VERSION "5.29.5")
 set(IBAPI4GU_IBKR_WINDOWS_PROTOBUF_NUMERIC_VERSION "5029005")
 set(IBAPI4GU_IBKR_WINDOWS_PROTOBUF_MARKER "#if PROTOBUF_VERSION != 5029005")
 
-set(IBAPI4GU_IBKR_UNIX_URL
-  "https://interactivebrokers.github.io/downloads/twsapi_macunix.1051.01.zip"
-)
-set(IBAPI4GU_IBKR_UNIX_SHA256
-  "50a459ed09f0030df25125a177e57b69bdf576ec3a89fcb1f81fdff95bbf6316"
-)
 set(IBAPI4GU_IBKR_UNIX_PROTOBUF_DIR "protobufUnix")
 set(IBAPI4GU_IBKR_UNIX_PROTOBUF_VERSION "3.12.4")
 set(IBAPI4GU_IBKR_UNIX_PROTOBUF_NUMERIC_VERSION "3012004")

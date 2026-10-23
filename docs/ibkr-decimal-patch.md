@@ -1,7 +1,7 @@
 # IBKR 10.51.01 decimal patch
 
-The Windows MSI and native Unix ZIP for IBKR API 10.51.01 contain the same
-`client/Decimal.cpp`, with SHA-256:
+The private IBKR `tws-api` tag `1051.01` contains `client/Decimal.cpp` with
+SHA-256:
 
 ```text
 9fa02137f50ec7c4753b50acd46471efa852928028e02018ccc8896b1b364678
@@ -18,7 +18,7 @@ Two correctness problems were confirmed during the repository audit:
 At configure time, `PatchDecimal.cmake` verifies the exact source hash, changes
 each status word initialization to zero, and replaces the formatter with a
 signed decimal-position implementation. The generated copy is stored only in
-the build tree; the downloaded source remains untouched.
+the build tree; the fetched source checkout remains untouched.
 
 Regression coverage includes positive, negative, and zero exponents, ordinary
 decimal strings, IBKR unset values, arithmetic operations, and double
@@ -30,5 +30,5 @@ For every IBKR upgrade:
 - Review upstream behavior and the new source rather than updating the hash
   mechanically.
 - Remove the patch when upstream passes the same regression cases.
-- Otherwise, rebase it, record the new hash and findings, and run every source
-  distribution/platform job.
+- Otherwise, rebase it, record the new hash and findings, and test every
+  generated-source/platform combination.
