@@ -97,6 +97,20 @@ include(ProjectWarnings)
 ibapi4gu_project_options_setup()
 ibapi4gu_project_warnings_setup()
 
+# Abseil 20240116.0 relies on an indirect <cstdint> include that GCC 15 no
+# longer provides while checking C++17 template bodies. Keep the workaround
+# scoped to the one pinned profile and language mode that needs it.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 15
+   AND IBAPI4GU_IBKR_DISTRIBUTION STREQUAL "WINDOWS"
+   AND IBAPI4GU_IBKR_GENERATION STREQUAL "STABLE"
+   AND IBAPI4GU_CXX_STANDARD STREQUAL "17")
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:CXX>:-include>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cstdint>"
+  )
+endif()
+
 include(Deps)
 
 set(_ibapi4gu_ewrapper_prototypes
