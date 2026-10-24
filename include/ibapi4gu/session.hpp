@@ -47,8 +47,8 @@ class IbkrGateway {
   IbkrGateway();
 
   template <typename Function>
-  void post(Function function) const {
-    post_impl(std::function<void(EClient&)>(std::move(function)));
+  Request<void> post(Function function) const {
+    return post_impl(std::function<void(EClient&)>(std::move(function)));
   }
 
   Subscription observe(const std::shared_ptr<EWrapper>& observer) const;
@@ -56,7 +56,8 @@ class IbkrGateway {
  private:
   friend class Session;
   explicit IbkrGateway(const std::weak_ptr<detail::SessionCore>& core);
-  void post_impl(const std::function<void(EClient&)>& function) const;
+  Request<void> post_impl(
+      const std::function<void(EClient&)>& function) const;
 
   std::weak_ptr<detail::SessionCore> core_;
 };

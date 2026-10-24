@@ -18,7 +18,8 @@ enum class ErrorCode {
   ibkr_notice,
   ibkr_warning,
   ibkr_error,
-  backend_failure
+  backend_failure,
+  operation_failed
 };
 
 enum class ErrorSeverity { information, warning, error, fatal };

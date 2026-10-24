@@ -118,6 +118,56 @@ Error callback_error(const std::string& message) {
   return error;
 }
 
+class QueuedRawOperation {
+ public:
+  explicit QueuedRawOperation(
+      const std::shared_ptr<RequestState<void> >& result)
+      : result_(result), status_(queued) {}
+
+  bool begin() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (status_ != queued) {
+      return false;
+    }
+    status_ = running;
+    return true;
+  }
+
+  void succeed() { finish(Result<void>::success()); }
+
+  void fail(const Error& error) { finish(Result<void>::failure(error)); }
+
+  void cancel() {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (status_ != queued) {
+        return;
+      }
+      status_ = cancelled;
+    }
+    result_->complete(Result<void>::failure(
+        Error(ErrorCode::cancelled, "raw operation cancelled")));
+  }
+
+ private:
+  enum Status { queued, running, finished, cancelled };
+
+  void finish(Result<void> result) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (status_ == finished || status_ == cancelled) {
+        return;
+      }
+      status_ = finished;
+    }
+    result_->complete(std::move(result));
+  }
+
+  std::shared_ptr<RequestState<void> > result_;
+  std::mutex mutex_;
+  Status status_;
+};
+
 }  // namespace
 
 class SessionCore : public RouterSink,
@@ -264,26 +314,43 @@ class SessionCore : public RouterSink,
     });
   }
 
-  void post_raw(const std::function<void(EClient&)>& function) {
+  Request<void> post_raw(const std::function<void(EClient&)>& function) {
+    const std::shared_ptr<RequestState<void> > state(
+        new RequestState<void>());
+    const std::shared_ptr<QueuedRawOperation> operation(
+        new QueuedRawOperation(state));
     const std::weak_ptr<SessionCore> weak = shared_from_this();
-    post([weak, function] {
+    const bool queued = post([weak, function, operation] {
+      if (!operation->begin()) {
+        return;
+      }
       const std::shared_ptr<SessionCore> self = weak.lock();
       if (!self || self->state() != SessionState::ready) {
-        if (self) {
-          self->publish_error(Error(ErrorCode::disconnected,
-                                    "raw operation rejected: session is not ready"));
-        }
+        operation->fail(
+            Error(self ? ErrorCode::disconnected : ErrorCode::shutdown,
+                  self ? "raw operation rejected: session is not ready"
+                       : "raw operation rejected: session no longer exists"));
         return;
       }
       try {
         self->backend_->raw_call(function);
+        operation->succeed();
       } catch (const std::exception& exception) {
-        self->publish_error(callback_error(exception.what()));
+        operation->fail(
+            Error(ErrorCode::operation_failed, exception.what()));
       } catch (...) {
-        self->publish_error(callback_error(
+        operation->fail(Error(
+            ErrorCode::operation_failed,
             "raw operation threw an unknown exception"));
       }
     });
+    if (!queued) {
+      operation->fail(Error(
+          ErrorCode::shutdown,
+          "raw operation rejected: session is shutting down"));
+    }
+    return Request<void>(state, [operation] { operation->cancel(); },
+                         AbandonPolicy::detach);
   }
 
   void shutdown(bool wait) {
@@ -824,12 +891,19 @@ IbkrGateway::IbkrGateway() {}
 IbkrGateway::IbkrGateway(const std::weak_ptr<detail::SessionCore>& core)
     : core_(core) {}
 
-void IbkrGateway::post_impl(
+Request<void> IbkrGateway::post_impl(
     const std::function<void(EClient&)>& function) const {
   const std::shared_ptr<detail::SessionCore> core = core_.lock();
   if (core) {
-    core->post_raw(function);
+    return core->post_raw(function);
   }
+  const std::shared_ptr<detail::RequestState<void> > state(
+      new detail::RequestState<void>());
+  state->complete(Result<void>::failure(Error(
+      ErrorCode::shutdown,
+      "raw operation rejected: session no longer exists")));
+  return Request<void>(state, std::function<void()>(),
+                       detail::AbandonPolicy::detach);
 }
 
 Subscription IbkrGateway::observe(

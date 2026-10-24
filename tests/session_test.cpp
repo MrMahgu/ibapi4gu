@@ -45,6 +45,57 @@ void require(bool condition, const std::string& message) {
   }
 }
 
+class TestExecutor {
+ public:
+  TestExecutor() : stopping_(false), worker_([this] { run(); }) {}
+
+  ~TestExecutor() {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stopping_ = true;
+    }
+    condition_.notify_all();
+    worker_.join();
+  }
+
+  ibapi4gu::CompletionExecutor function() {
+    return [this](std::function<void()> task) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        tasks_.push_back(std::move(task));
+      }
+      condition_.notify_all();
+    };
+  }
+
+  std::thread::id thread_id() const { return worker_.get_id(); }
+
+ private:
+  void run() {
+    for (;;) {
+      std::function<void()> task;
+      {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condition_.wait(lock, [this] {
+          return stopping_ || !tasks_.empty();
+        });
+        if (stopping_ && tasks_.empty()) {
+          return;
+        }
+        task = tasks_.front();
+        tasks_.pop_front();
+      }
+      task();
+    }
+  }
+
+  mutable std::mutex mutex_;
+  std::condition_variable condition_;
+  std::deque<std::function<void()> > tasks_;
+  bool stopping_;
+  std::thread worker_;
+};
+
 struct Controller {
   struct SentRequest {
     int id;
@@ -351,6 +402,214 @@ void test_generic_value_operation_and_wire_formatting() {
   require(ibapi4gu::detail::format_historical_end_time(epoch) ==
               "19700101-00:00:00",
           "historical end time was not formatted as UTC");
+}
+
+void test_request_waiting_and_result_value_semantics() {
+  std::vector<int> numbers;
+  numbers.push_back(7);
+  Result<std::vector<int> > original =
+      Result<std::vector<int> >::success(numbers);
+  Result<std::vector<int> > copy = original;
+  copy.value()[0] = 11;
+  require(original.value()[0] == 7 && copy.value()[0] == 11,
+          "Result copies shared mutable value storage");
+
+  Result<void> void_success = Result<void>::success();
+  void_success.value();
+  require(void_success.has_value(), "Result<void> did not represent success");
+  Result<void> void_failure = Result<void>::failure(
+      ibapi4gu::Error(ErrorCode::operation_failed, "failed"));
+  require(!void_failure &&
+              void_failure.error().code == ErrorCode::operation_failed,
+          "Result<void> did not preserve an error");
+
+  Fixture fixture;
+  Result<std::shared_ptr<Session> > connected = fixture.connect();
+  require(connected.has_value(), "session did not connect");
+  std::shared_ptr<Session> session = connected.value();
+
+  ibapi4gu::Request<std::vector<ContractDetails> > request =
+      session->contract_details(ibapi4gu::Stock("WAIT"));
+  const int id = fixture.controller->wait_for_request(0);
+  require(request.valid() && !request.ready() &&
+              !request.wait_for(std::chrono::milliseconds(10)),
+          "pending request reported ready");
+
+  std::thread::id session_thread;
+  ibapi4gu::Request<void> session_thread_probe = session->ibkr().post(
+      [&session_thread](EClient&) {
+        session_thread = std::this_thread::get_id();
+      });
+  require(session_thread_probe.get().has_value(),
+          "could not identify the session thread");
+
+  std::mutex completion_mutex;
+  std::condition_variable completion_condition;
+  int completion_count = 0;
+  std::thread::id completion_thread;
+  TestExecutor completion_executor;
+  require(request.on_complete(
+              completion_executor.function(),
+              [&completion_mutex, &completion_condition, &completion_count,
+               &completion_thread](
+                  const Result<std::vector<ContractDetails> >& completed) {
+                require(completed && completed.value().empty(),
+                        "completion callback received the wrong result");
+                {
+                  std::lock_guard<std::mutex> lock(completion_mutex);
+                  completion_thread = std::this_thread::get_id();
+                  ++completion_count;
+                }
+                completion_condition.notify_all();
+                throw std::runtime_error("completion callback test");
+              }),
+          "completion callback was not registered");
+
+  std::future<void> first_waiter = std::async(
+      std::launch::async, [&request] { request.wait(); });
+  std::future<void> second_waiter = std::async(
+      std::launch::async, [&request] { request.wait(); });
+  fixture.controller->emit(
+      [id](EWrapper& wrapper) { wrapper.contractDetailsEnd(id); });
+  first_waiter.get();
+  second_waiter.get();
+  require(request.ready(), "completed request did not report ready");
+  require(request.on_complete(
+              completion_executor.function(),
+              [&completion_mutex, &completion_condition, &completion_count](
+                  const Result<std::vector<ContractDetails> >& completed) {
+                require(completed.has_value(),
+                        "late completion callback received an error");
+                {
+                  std::lock_guard<std::mutex> lock(completion_mutex);
+                  ++completion_count;
+                }
+                completion_condition.notify_all();
+              }),
+          "late completion callback was not registered");
+  {
+    std::unique_lock<std::mutex> lock(completion_mutex);
+    require(completion_condition.wait_for(
+                lock, std::chrono::seconds(2),
+                [&completion_count] { return completion_count == 2; }),
+            "completion callbacks did not execute");
+  }
+  require(completion_thread == completion_executor.thread_id() &&
+              completion_thread != session_thread,
+          "completion callback ran on the session thread");
+
+  Result<std::vector<ContractDetails> > result;
+  require(request.try_get(result) && result && result.value().empty(),
+          "try_get did not consume a ready request");
+  const Result<std::vector<ContractDetails> > consumed_result = request.get();
+  const bool registered_after_consume = request.on_complete(
+      completion_executor.function(),
+      [](const Result<std::vector<ContractDetails> >&) {});
+  require(!request.valid() && !request.try_get(result) &&
+              !consumed_result &&
+              consumed_result.error().code == ErrorCode::invalid_operation &&
+              !registered_after_consume,
+          "consumed request remained valid");
+
+  ibapi4gu::Request<std::vector<ContractDetails> > cancelled =
+      session->contract_details(ibapi4gu::Stock("CANCEL_WAIT"));
+  fixture.controller->wait_for_request(1);
+  std::future<Result<std::vector<ContractDetails> > > waiting_get =
+      std::async(std::launch::async, [&cancelled] {
+        return cancelled.get();
+      });
+  cancelled.cancel();
+  cancelled.cancel();
+  const Result<std::vector<ContractDetails> > cancelled_result =
+      waiting_get.get();
+  require(!cancelled_result &&
+              cancelled_result.error().code == ErrorCode::cancelled,
+          "cancel concurrent with get did not complete deterministically");
+  fixture.controller->wait_for_cancellations(1);
+  {
+    std::lock_guard<std::mutex> lock(fixture.controller->mutex);
+    require(fixture.controller->cancellations.size() == 1,
+            "repeated cancellation reached the wire more than once");
+  }
+}
+
+void test_observable_raw_operations() {
+  Fixture fixture;
+  Result<std::shared_ptr<Session> > connected = fixture.connect();
+  require(connected.has_value(), "session did not connect");
+  std::shared_ptr<Session> session = connected.value();
+  ibapi4gu::IbkrGateway gateway = session->ibkr();
+
+  std::atomic<int> executions(0);
+  ibapi4gu::Request<void> success = gateway.post(
+      [&executions](EClient&) { ++executions; });
+  require(success.get().has_value() && executions.load() == 1,
+          "raw operation did not report successful execution");
+
+  ibapi4gu::Request<void> failure = gateway.post([](EClient&) {
+    throw std::runtime_error("raw operation exploded");
+  });
+  const Result<void> failure_result = failure.get();
+  require(!failure_result &&
+              failure_result.error().code == ErrorCode::operation_failed &&
+              failure_result.error().message == "raw operation exploded",
+          "raw operation exception was not returned to its caller");
+
+  gateway.post([&executions](EClient&) { ++executions; });
+  ibapi4gu::Request<void> detached_fence = gateway.post([](EClient&) {});
+  require(detached_fence.get().has_value() && executions.load() == 2,
+          "ignoring a raw result cancelled fire-and-forget work");
+
+  std::mutex blocker_mutex;
+  std::condition_variable blocker_condition;
+  bool blocker_started = false;
+  bool release_blocker = false;
+  ibapi4gu::Request<void> blocker = gateway.post(
+      [&blocker_mutex, &blocker_condition, &blocker_started,
+       &release_blocker](EClient&) {
+        std::unique_lock<std::mutex> lock(blocker_mutex);
+        blocker_started = true;
+        blocker_condition.notify_all();
+        blocker_condition.wait(lock, [&release_blocker] {
+          return release_blocker;
+        });
+      });
+  {
+    std::unique_lock<std::mutex> lock(blocker_mutex);
+    require(blocker_condition.wait_for(
+                lock, std::chrono::seconds(2),
+                [&blocker_started] { return blocker_started; }),
+            "raw blocker did not start");
+  }
+
+  std::atomic<bool> cancelled_executed(false);
+  ibapi4gu::Request<void> cancelled = gateway.post(
+      [&cancelled_executed](EClient&) { cancelled_executed.store(true); });
+  cancelled.cancel();
+  require(cancelled.wait_for(std::chrono::milliseconds(100)),
+          "cancelled raw operation did not become ready");
+  const Result<void> cancelled_result = cancelled.get();
+  require(!cancelled_result &&
+              cancelled_result.error().code == ErrorCode::cancelled,
+          "queued raw cancellation did not return a cancellation error");
+
+  {
+    std::lock_guard<std::mutex> lock(blocker_mutex);
+    release_blocker = true;
+  }
+  blocker_condition.notify_all();
+  require(blocker.get().has_value(), "raw blocker did not complete");
+  ibapi4gu::Request<void> cancellation_fence = gateway.post([](EClient&) {});
+  require(cancellation_fence.get().has_value() &&
+              !cancelled_executed.load(),
+          "cancelled raw operation executed on the session thread");
+
+  session->shutdown();
+  ibapi4gu::Request<void> rejected = gateway.post([](EClient&) {});
+  const Result<void> rejected_result = rejected.get();
+  require(!rejected_result &&
+              rejected_result.error().code == ErrorCode::shutdown,
+          "raw operation queued after shutdown did not fail observably");
 }
 
 void test_connection_waits_for_traditional_next_valid_id() {
@@ -934,6 +1193,10 @@ int main() {
   const std::pair<const char*, Test> tests[] = {
       std::make_pair("generic value operation",
                      &test_generic_value_operation_and_wire_formatting),
+      std::make_pair("request waiting and result values",
+                     &test_request_waiting_and_result_value_semantics),
+      std::make_pair("observable raw operations",
+                     &test_observable_raw_operations),
       std::make_pair("connection readiness",
                      &test_connection_waits_for_traditional_next_valid_id),
       std::make_pair("connection error classification",

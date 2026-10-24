@@ -134,8 +134,12 @@ if (connected) {
 ```
 
 Connection becomes ready only after `nextValidId`. Requests are cancellable,
-time out after 30 seconds by default, and cancel when abandoned. Raw calls can
-share the same serialized connection through `session->ibkr().post(...)`.
+time out after 30 seconds by default, and cancel when abandoned. Requests also
+support readiness checks, timed waits, nonblocking retrieval, and completion
+callbacks scheduled through a caller-provided executor. Raw calls can share
+the same serialized connection through `session->ibkr().post(...)`; its
+`Request<void>` reports execution or failure, while an ignored result keeps
+the original fire-and-forget behavior.
 See [`docs/session-api.md`](docs/session-api.md) for threading, ID allocation,
 historical bars, error classification, raw observer, and Protobuf profile
 rules.

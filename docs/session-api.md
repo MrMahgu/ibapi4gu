@@ -28,6 +28,12 @@ Do not block the event-loop thread. In particular, do not call
 `Request<T>::get()` from a state listener, error listener, raw observer, or a
 function passed to `ibkr().post()`.
 
+A `CompletionExecutor` accepts a `std::function<void()>` and must schedule it
+on an application-owned execution context. `Request<T>::on_complete()` invokes
+the executor but never directly invokes the completion callback. An inline
+executor therefore violates this contract. Executor and completion-callback
+exceptions are contained.
+
 ## IDs
 
 Request and order IDs have separate atomic, monotonic allocators. The order
@@ -37,12 +43,27 @@ inventing IDs can collide with work sharing the same session.
 
 ## Finite requests
 
-`contract_details()` and `historical_bars()` return move-only requests.
-`get()` blocks and returns a `Result<T>`. The timeout defaults to 30 seconds.
-Explicit `cancel()`, timeout, a matching terminal IBKR request error,
-disconnect, or shutdown completes the result with an `Error`. Destroying a
-request before `get()` cancels it. Callbacks arriving after completion are
-ignored.
+`contract_details()` and `historical_bars()` return move-only requests. A
+request provides:
+
+- `ready()` for a nonblocking readiness check;
+- `wait()` and `wait_for()` without consuming the result;
+- `try_get(result)` to consume a result only when it is ready;
+- `get()` to wait for and consume the result; and
+- `on_complete(executor, callback)` to observe completion without blocking.
+
+Multiple threads may wait concurrently, but exactly one `get()` or successful
+`try_get()` consumes a request. Later retrieval returns `invalid_operation`.
+`cancel()` is idempotent and may race with `get()`; the first terminal event
+processed by the session wins, and `get()` returns that result. The timeout
+defaults to 30 seconds. Explicit cancellation, timeout, a matching terminal
+IBKR request error, disconnect, or shutdown completes the result with an
+`Error`. Destroying a pending normalized request before retrieval cancels it.
+Callbacks arriving after completion are ignored.
+
+`Result<void>` represents successful operations without a payload. Copies of
+`Result<T>` have independent value storage; mutating one successful result
+does not mutate another copy.
 
 Finite operations share one internal registry for request IDs, deadlines,
 cancellation, failure, disconnect, and late-callback suppression. A typed
@@ -83,7 +104,12 @@ backend errors. The classifier does not perform automatic reconnect or replay.
 ## Raw interoperability
 
 Use `session->ibkr().post([](EClient& client) { ... })` for serialized raw
-outbound calls. Register a `std::shared_ptr<EWrapper>` with
+outbound calls. It returns `Request<void>`: success means the function ran,
+and queue rejection or an exception is returned as an error. Explicit
+cancellation prevents execution only while the operation is still queued;
+once execution starts, its result wins. Ignoring the returned request detaches
+it instead of cancelling it, preserving fire-and-forget calls. Raw posts have
+no deadline. Register a `std::shared_ptr<EWrapper>` with
 `session->ibkr().observe(...)`; the RAII `Subscription` removes it.
 
 Raw observers receive every traditional and Protobuf callback exactly as IBKR
