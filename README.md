@@ -2,8 +2,11 @@
 
 Reproducible CMake integration for the Interactive Brokers C++ TWS API on
 x86-64 Linux/WSL and Windows. The project checks out a pinned revision from
-IBKR's private Git repository, builds its exact dependency set, and exposes a
-single CMake target: `ibapi4gu::twsapi`.
+IBKR's private Git repository and builds its exact dependency set. It exposes
+two CMake targets:
+
+- `ibapi4gu::twsapi` is the unchanged raw IBKR C++ library.
+- `ibapi4gu::api` is a normalized shared-session API linked to `twsapi`.
 
 > [!IMPORTANT]
 > Building this project requires an IBKR-authorized GitHub account with access
@@ -114,6 +117,31 @@ add_subdirectory(path/to/ibapi4gu)
 
 target_link_libraries(my_application PRIVATE ibapi4gu::twsapi)
 ```
+
+Link `ibapi4gu::api` instead for the high-level session facade:
+
+```cpp
+#include <ibapi4gu/api.hpp>
+
+ibapi4gu::Result<std::shared_ptr<ibapi4gu::Session> > connected =
+    ibapi4gu::Session::connect();
+if (connected) {
+  ibapi4gu::Request<std::vector<ibapi4gu::ContractDetails> > request =
+      connected.value()->contract_details(ibapi4gu::Stock("AAPL"));
+  ibapi4gu::Result<std::vector<ibapi4gu::ContractDetails> > details =
+      request.get();
+}
+```
+
+Connection becomes ready only after `nextValidId`. Requests are cancellable,
+time out after 30 seconds by default, and cancel when abandoned. Raw calls can
+share the same serialized connection through `session->ibkr().post(...)`.
+See [`docs/session-api.md`](docs/session-api.md) for threading, ID allocation,
+raw observer, and Protobuf profile rules.
+
+The manual `ibapi4gu_contract_details` example accepts `HOST PORT CLIENT_ID
+SYMBOL`. It is built with the examples but is intentionally not registered as
+an automatic test because it requires a running TWS or IB Gateway.
 
 Useful configuration variables:
 

@@ -17,6 +17,17 @@ target_compile_definitions(ibapi4gu_smoke_test PRIVATE
 )
 add_test(NAME public-target-smoke COMMAND ibapi4gu_smoke_test)
 
+add_executable(ibapi4gu_session_test session_test.cpp)
+target_include_directories(ibapi4gu_session_test PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(ibapi4gu_session_test PRIVATE
+  ibapi4gu::api
+  ibapi4gu_project_options
+  ibapi4gu_project_warnings
+)
+add_test(NAME session-api COMMAND ibapi4gu_session_test)
+
 add_test(NAME decimal-patch-guard
   COMMAND "${CMAKE_COMMAND}"
     "-DIBAPI4GU_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
@@ -51,6 +62,7 @@ add_test(NAME local-source-configure
 )
 set_tests_properties(local-source-configure PROPERTIES RUN_SERIAL TRUE)
 
-set_property(TARGET ibapi4gu_decimal_test ibapi4gu_smoke_test
+set_property(TARGET
+  ibapi4gu_decimal_test ibapi4gu_smoke_test ibapi4gu_session_test
   PROPERTY FOLDER "tests"
 )

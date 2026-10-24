@@ -99,6 +99,60 @@ ibapi4gu_project_warnings_setup()
 
 include(Deps)
 
+set(_ibapi4gu_ewrapper_prototypes
+  "${_ibapi4gu_client_directory}/EWrapper_prototypes.h"
+)
+file(SHA256 "${_ibapi4gu_ewrapper_prototypes}"
+  _ibapi4gu_ewrapper_prototypes_sha256
+)
+set(_ibapi4gu_reviewed_ewrapper_prototypes_sha256
+  "693dad0ae296ea49d6a6c4d92d2bb25c16eefd6e06618dd4aa257d499e20f457"
+)
+if(NOT _ibapi4gu_ewrapper_prototypes_sha256 STREQUAL
+   _ibapi4gu_reviewed_ewrapper_prototypes_sha256)
+  message(FATAL_ERROR
+    "IBKR EWrapper callback surface changed. Regenerate and review "
+    "src/detail/ewrapper_manifest.inc before building the session API."
+  )
+endif()
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/detail/ewrapper_manifest.inc"
+  _ibapi4gu_ewrapper_manifest
+)
+string(FIND "${_ibapi4gu_ewrapper_manifest}"
+  "EWrapper_prototypes.h sha256: ${_ibapi4gu_ewrapper_prototypes_sha256}"
+  _ibapi4gu_manifest_hash_position
+)
+if(_ibapi4gu_manifest_hash_position EQUAL -1)
+  message(FATAL_ERROR "The generated EWrapper forwarding manifest is stale.")
+endif()
+
+add_library(ibapi4gu_api STATIC
+  src/callback_router.cpp
+  src/session.cpp
+  src/socket_backend.cpp
+)
+add_library(ibapi4gu::api ALIAS ibapi4gu_api)
+target_include_directories(ibapi4gu_api
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_compile_features(ibapi4gu_api PUBLIC
+  ${IBAPI4GU_CXX_COMPILE_FEATURE}
+)
+target_link_libraries(ibapi4gu_api
+  PUBLIC ibapi4gu::twsapi
+  PRIVATE ibapi4gu_project_warnings
+)
+if(NOT WIN32)
+  target_link_libraries(ibapi4gu_api PRIVATE Threads::Threads)
+endif()
+set_target_properties(ibapi4gu_api PROPERTIES
+  OUTPUT_NAME ibapi4gu_api
+  FOLDER "ibapi4gu"
+)
+
 if(IBAPI4GU_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()

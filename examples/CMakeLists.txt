@@ -1,1 +1,2 @@
 add_subdirectory(ibapi_info)
+add_subdirectory(contract_details)
