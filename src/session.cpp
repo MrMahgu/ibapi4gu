@@ -13,10 +13,14 @@
 #include <utility>
 
 #include <Contract.h>
+#include <Decimal.h>
 #include <EClient.h>
+#include <bar.h>
 
 #include "detail/backend.hpp"
 #include "detail/callback_router.hpp"
+#include "detail/error_classifier.hpp"
+#include "detail/operation_registry.hpp"
 
 namespace ibapi4gu {
 namespace detail {
@@ -73,6 +77,47 @@ ContractDetails from_ibkr_details(const ::ContractDetails& source) {
   return destination;
 }
 
+DecimalValue from_ibkr_decimal(const ::Decimal& source) {
+  return source.isUnset()
+             ? DecimalValue()
+             : DecimalValue(
+                   DecimalFunctions::decimalStringToDisplay(source));
+}
+
+HistoricalBar from_ibkr_bar(const ::Bar& source) {
+  HistoricalBar destination;
+  destination.time = source.time;
+  destination.open = source.open;
+  destination.high = source.high;
+  destination.low = source.low;
+  destination.close = source.close;
+  destination.volume = from_ibkr_decimal(source.volume);
+  destination.weighted_average_price = from_ibkr_decimal(source.wap);
+  destination.trade_count = source.count;
+  return destination;
+}
+
+Error connection_error(ErrorCode code, const std::string& message) {
+  Error error(code, message);
+  error.severity = ErrorSeverity::fatal;
+  error.scope = ErrorScope::connection;
+  error.terminal = true;
+  return error;
+}
+
+Error backend_error(const std::string& message) {
+  Error error(ErrorCode::backend_failure, message);
+  error.scope = ErrorScope::connection;
+  error.terminal = false;
+  return error;
+}
+
+Error callback_error(const std::string& message) {
+  Error error(ErrorCode::callback_exception, message);
+  error.terminal = false;
+  return error;
+}
+
 }  // namespace
 
 class SessionCore : public RouterSink,
@@ -107,8 +152,8 @@ class SessionCore : public RouterSink,
       lock.unlock();
       shutdown(false);
       return Result<std::shared_ptr<Session> >::failure(
-          Error(ErrorCode::connection_timeout,
-                "timed out waiting for IBKR nextValidId"));
+          connection_error(ErrorCode::connection_timeout,
+                           "timed out waiting for IBKR nextValidId"));
     }
     if (connect_error_.code != ErrorCode::none) {
       const Error error = connect_error_;
@@ -133,55 +178,37 @@ class SessionCore : public RouterSink,
   Request<std::vector<ContractDetails> > contract_details(
       const Contract& contract, const RequestOptions& options) {
     const RequestId id = reserve_request_id();
-    typedef std::vector<ContractDetails> Value;
-    const std::shared_ptr<RequestState<Value> > state(
-        new RequestState<Value>());
-    const std::weak_ptr<SessionCore> weak = shared_from_this();
-    if (this->state() != SessionState::ready) {
-      state->complete(Result<Value>::failure(
-          Error(ErrorCode::disconnected, "session is not ready", 0, 0,
-                id.value())));
-      return Request<Value>(state, std::function<void()>());
-    }
-    post([weak, id, contract, options, state] {
-      const std::shared_ptr<SessionCore> self = weak.lock();
-      if (!self) {
-        state->complete(Result<Value>::failure(
-            Error(ErrorCode::shutdown, "session no longer exists", 0, 0,
-                  id.value())));
-        return;
-      }
-      if (self->state() != SessionState::ready) {
-        state->complete(Result<Value>::failure(
-            Error(ErrorCode::disconnected, "session is not ready", 0, 0,
-                  id.value())));
-        return;
-      }
-      PendingContract pending;
-      pending.state = state;
-      pending.deadline = std::chrono::steady_clock::now() + options.timeout;
-      self->pending_contracts_[id.value()] = pending;
-      try {
-        self->backend_->request_contract_details(id, contract);
-      } catch (const std::exception& exception) {
-        self->complete_contract_error(
-            id.value(), Error(ErrorCode::request_failed, exception.what(), 0,
-                              0, id.value()));
-      } catch (...) {
-        self->complete_contract_error(
-            id.value(), Error(ErrorCode::request_failed,
-                              "unknown exception while sending request", 0,
-                              0, id.value()));
-      }
-    });
+    return begin_rows_operation<ContractDetails>(
+        id, options, "contract details",
+        [contract](Backend& backend, RequestId request_id) {
+          backend.request_contract_details(request_id, contract);
+        },
+        [](Backend& backend, RequestId request_id) {
+          backend.cancel_contract_details(request_id);
+        });
+  }
 
-    const std::function<void()> cancel = [weak, id] {
-      const std::shared_ptr<SessionCore> self = weak.lock();
-      if (self) {
-        self->cancel_contract_request(id);
-      }
-    };
-    return Request<Value>(state, cancel);
+  Request<std::vector<HistoricalBar> > historical_bars(
+      const Contract& contract,
+      const HistoricalBarsOptions& historical_options,
+      const RequestOptions& request_options) {
+    const RequestId id = reserve_request_id();
+    if (historical_options.duration.count <= 0) {
+      return failed_request<std::vector<HistoricalBar> >(
+          Error(ErrorCode::invalid_operation,
+                "historical duration must be greater than zero", 0, 0,
+                id.value()));
+    }
+    return begin_rows_operation<HistoricalBar>(
+        id, request_options, "historical bars",
+        [contract, historical_options](Backend& backend,
+                                       RequestId request_id) {
+          backend.request_historical_bars(request_id, contract,
+                                          historical_options);
+        },
+        [](Backend& backend, RequestId request_id) {
+          backend.cancel_historical_bars(request_id);
+        });
   }
 
   Subscription add_state_listener(
@@ -251,18 +278,17 @@ class SessionCore : public RouterSink,
       try {
         self->backend_->raw_call(function);
       } catch (const std::exception& exception) {
-        self->publish_error(Error(ErrorCode::callback_exception,
-                                  exception.what()));
+        self->publish_error(callback_error(exception.what()));
       } catch (...) {
-        self->publish_error(Error(ErrorCode::callback_exception,
-                                  "raw operation threw an unknown exception"));
+        self->publish_error(callback_error(
+            "raw operation threw an unknown exception"));
       }
     });
   }
 
   void shutdown(bool wait) {
-    stop_requested_.store(true);
-    backend_->wake();
+    request_stop();
+    wake_backend();
 
     bool join = false;
     {
@@ -296,32 +322,56 @@ class SessionCore : public RouterSink,
 
   void on_contract_details(int request_id,
                            const ::ContractDetails& details) override {
-    std::map<int, PendingContract>::iterator iterator =
-        pending_contracts_.find(request_id);
-    if (iterator != pending_contracts_.end()) {
-      iterator->second.rows.push_back(from_ibkr_details(details));
+    const std::shared_ptr<RowsOperation<ContractDetails> > operation =
+        operations_.find<RowsOperation<ContractDetails> >(
+            RequestId(request_id));
+    if (operation) {
+      operation->append(from_ibkr_details(details));
     }
   }
 
   void on_contract_details_end(int request_id) override {
-    std::map<int, PendingContract>::iterator iterator =
-        pending_contracts_.find(request_id);
-    if (iterator == pending_contracts_.end()) {
-      return;
+    const std::shared_ptr<RowsOperation<ContractDetails> > operation =
+        operations_.take<RowsOperation<ContractDetails> >(
+            RequestId(request_id));
+    if (operation) {
+      operation->finish();
     }
-    iterator->second.state->complete(
-        Result<std::vector<ContractDetails> >::success(
-            std::move(iterator->second.rows)));
-    pending_contracts_.erase(iterator);
+  }
+
+  void on_historical_bar(int request_id, const ::Bar& bar) override {
+    const std::shared_ptr<RowsOperation<HistoricalBar> > operation =
+        operations_.find<RowsOperation<HistoricalBar> >(
+            RequestId(request_id));
+    if (operation) {
+      operation->append(from_ibkr_bar(bar));
+    }
+  }
+
+  void on_historical_bars_end(int request_id) override {
+    const std::shared_ptr<RowsOperation<HistoricalBar> > operation =
+        operations_.take<RowsOperation<HistoricalBar> >(
+            RequestId(request_id));
+    if (operation) {
+      operation->finish();
+    }
   }
 
   void on_error(int id, long long timestamp_ms, int code,
                 const std::string& message,
-                const std::string&) override {
-    const Error error(ErrorCode::request_failed, message, code, timestamp_ms,
-                      id);
-    if (id >= 0) {
-      complete_contract_error(id, error);
+                const std::string& advanced_reject_json) override {
+    const Error error = classify_ibkr_error(
+        id, timestamp_ms, code, message, advanced_reject_json);
+    if (error.terminal && error.scope == ErrorScope::request && id >= 0) {
+      operations_.fail(RequestId(id), error);
+    }
+    if (error.terminal && error.scope == ErrorScope::connection) {
+      unexpected_disconnect_ = true;
+      request_stop();
+      operations_.fail_all(error);
+      set_state(SessionState::disconnected);
+      finish_connect(error);
+      wake_backend();
     }
     publish_error(error);
   }
@@ -329,15 +379,15 @@ class SessionCore : public RouterSink,
   void on_connection_closed() override {
     if (!stop_requested_.load()) {
       unexpected_disconnect_ = true;
-      stop_requested_.store(true);
-      const Error error(ErrorCode::disconnected,
-                        "IBKR connection closed unexpectedly");
-      fail_all_pending(error);
+      request_stop();
+      const Error error = connection_error(
+          ErrorCode::disconnected, "IBKR connection closed unexpectedly");
+      operations_.fail_all(error);
       set_state(SessionState::disconnected);
       finish_connect(error);
       publish_error(error);
     }
-    backend_->wake();
+    wake_backend();
   }
 
   std::vector<std::shared_ptr<EWrapper> > raw_observers() override {
@@ -355,42 +405,61 @@ class SessionCore : public RouterSink,
                              const std::string& message) override {
     std::ostringstream stream;
     stream << "raw observer threw from " << callback << ": " << message;
-    publish_error(Error(ErrorCode::callback_exception, stream.str()));
+    publish_error(callback_error(stream.str()));
   }
 
  private:
-  struct PendingContract {
-    std::shared_ptr<RequestState<std::vector<ContractDetails> > > state;
-    std::vector<ContractDetails> rows;
-    std::chrono::steady_clock::time_point deadline;
-  };
-
   void event_loop() {
     Error error;
-    if (!backend_->connect(options_, &router_, error)) {
+    bool connected = false;
+    try {
+      connected = backend_->connect(options_, &router_, error);
+    } catch (const std::exception& exception) {
+      error = connection_error(
+          ErrorCode::connection_failed,
+          std::string("session backend connect failed: ") + exception.what());
+    } catch (...) {
+      error = connection_error(
+          ErrorCode::connection_failed,
+          "session backend connect failed with an unknown exception");
+    }
+    if (!connected) {
       if (error.code == ErrorCode::none) {
-        error = Error(ErrorCode::connection_failed,
-                      "IBKR socket handshake failed");
+        error = connection_error(ErrorCode::connection_failed,
+                                 "IBKR socket handshake failed");
+      } else if (error.scope != ErrorScope::connection) {
+        error.severity = ErrorSeverity::fatal;
+        error.scope = ErrorScope::connection;
+        error.terminal = true;
       }
       set_state(SessionState::disconnected);
       finish_connect(error);
+      disconnect_backend();
       return;
     }
 
-    while (!stop_requested_.load()) {
-      drain_tasks();
-      if (stop_requested_.load()) {
-        break;
+    try {
+      while (!stop_requested_.load()) {
+        drain_tasks();
+        if (stop_requested_.load()) {
+          break;
+        }
+        backend_->poll();
+        if (stop_requested_.load()) {
+          break;
+        }
+        drain_tasks();
+        expire_requests();
+        if (!stop_requested_.load() && !backend_->connected()) {
+          on_connection_closed();
+        }
       }
-      backend_->poll();
-      if (stop_requested_.load()) {
-        break;
-      }
-      drain_tasks();
-      expire_requests();
-      if (!stop_requested_.load() && !backend_->connected()) {
-        on_connection_closed();
-      }
+    } catch (const std::exception& exception) {
+      fail_event_loop(std::string("session backend poll failed: ") +
+                      exception.what());
+    } catch (...) {
+      fail_event_loop(
+          "session backend poll failed with an unknown exception");
     }
 
     if (!unexpected_disconnect_ && state() != SessionState::disconnected) {
@@ -399,8 +468,8 @@ class SessionCore : public RouterSink,
     // Complete work that was queued just before shutdown. These tasks observe
     // the non-ready state and resolve their handles without sending new work.
     drain_tasks();
-    fail_all_pending(Error(ErrorCode::shutdown, "session shut down"));
-    backend_->disconnect();
+    operations_.fail_all(Error(ErrorCode::shutdown, "session shut down"));
+    disconnect_backend();
     set_state(SessionState::disconnected);
     finish_connect(Error(ErrorCode::shutdown,
                          "session shut down before nextValidId"));
@@ -410,12 +479,28 @@ class SessionCore : public RouterSink,
   void configure(const SessionOptions& options) { options_ = options; }
 
  private:
-  void post(const std::function<void()>& task) {
+  void wake_backend() {
+    try {
+      backend_->wake();
+    } catch (...) {
+    }
+  }
+
+  void request_stop() {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+    stop_requested_.store(true);
+  }
+
+  bool post(const std::function<void()>& task) {
     {
       std::lock_guard<std::mutex> lock(tasks_mutex_);
+      if (stop_requested_.load()) {
+        return false;
+      }
       tasks_.push_back(task);
     }
-    backend_->wake();
+    wake_backend();
+    return true;
   }
 
   void drain_tasks() {
@@ -430,80 +515,150 @@ class SessionCore : public RouterSink,
       try {
         task();
       } catch (const std::exception& exception) {
-        publish_error(
-            Error(ErrorCode::callback_exception, exception.what()));
+        publish_error(callback_error(exception.what()));
       } catch (...) {
-        publish_error(Error(ErrorCode::callback_exception,
-                            "queued operation threw an unknown exception"));
+        publish_error(callback_error(
+            "queued operation threw an unknown exception"));
       }
     }
   }
 
-  void cancel_contract_request(RequestId id) {
+  void fail_event_loop(const std::string& message) {
+    unexpected_disconnect_ = true;
+    request_stop();
+    const Error error = connection_error(ErrorCode::backend_failure, message);
+    operations_.fail_all(error);
+    set_state(SessionState::disconnected);
+    finish_connect(error);
+    publish_error(error);
+  }
+
+  void disconnect_backend() {
+    try {
+      backend_->disconnect();
+    } catch (const std::exception& exception) {
+      publish_error(backend_error(
+          std::string("session backend disconnect failed: ") +
+          exception.what()));
+    } catch (...) {
+      publish_error(backend_error(
+          "session backend disconnect failed with an unknown exception"));
+    }
+  }
+
+  template <typename T>
+  Request<T> failed_request(const Error& error) {
+    const std::shared_ptr<RequestState<T> > state(new RequestState<T>());
+    state->complete(Result<T>::failure(error));
+    return Request<T>(state, std::function<void()>());
+  }
+
+  template <typename Row>
+  Request<std::vector<Row> > begin_rows_operation(
+      RequestId id, const RequestOptions& options,
+      const std::string& operation_name,
+      const std::function<void(Backend&, RequestId)>& send,
+      const std::function<void(Backend&, RequestId)>& cancel_wire) {
+    typedef std::vector<Row> Value;
+    if (options.timeout <= std::chrono::milliseconds::zero()) {
+      return failed_request<Value>(
+          Error(ErrorCode::invalid_operation,
+                "request timeout must be greater than zero", 0, 0,
+                id.value()));
+    }
+
+    const std::shared_ptr<RequestState<Value> > state(
+        new RequestState<Value>());
+    const std::weak_ptr<SessionCore> weak = shared_from_this();
+    if (this->state() != SessionState::ready) {
+      state->complete(Result<Value>::failure(
+          Error(ErrorCode::disconnected, "session is not ready", 0, 0,
+                id.value())));
+      return Request<Value>(state, std::function<void()>());
+    }
+
+    const bool queued = post([weak, id, options, operation_name, send,
+                              cancel_wire, state] {
+      const std::shared_ptr<SessionCore> self = weak.lock();
+      if (!self) {
+        state->complete(Result<Value>::failure(
+            Error(ErrorCode::shutdown, "session no longer exists", 0, 0,
+                  id.value())));
+        return;
+      }
+      if (self->state() != SessionState::ready) {
+        state->complete(Result<Value>::failure(
+            Error(ErrorCode::disconnected, "session is not ready", 0, 0,
+                  id.value())));
+        return;
+      }
+
+      const std::function<void(RequestId)> cancel =
+          [weak, cancel_wire](RequestId request_id) {
+            const std::shared_ptr<SessionCore> owner = weak.lock();
+            if (owner) {
+              cancel_wire(*owner->backend_, request_id);
+            }
+          };
+      const std::shared_ptr<RowsOperation<Row> > operation(
+          new RowsOperation<Row>(
+              id, std::chrono::steady_clock::now() + options.timeout, cancel,
+              state));
+      if (!self->operations_.add(operation)) {
+        operation->fail(Error(ErrorCode::invalid_operation,
+                              "request ID is already active", 0, 0,
+                              id.value()));
+        return;
+      }
+
+      try {
+        send(*self->backend_, id);
+      } catch (const std::exception& exception) {
+        Error error(ErrorCode::request_failed, exception.what(), 0, 0,
+                    id.value());
+        error.scope = ErrorScope::request;
+        self->operations_.fail(id, error);
+      } catch (...) {
+        Error error(ErrorCode::request_failed,
+                    "unknown exception while sending " + operation_name, 0,
+                    0, id.value());
+        error.scope = ErrorScope::request;
+        self->operations_.fail(id, error);
+      }
+    });
+
+    if (!queued) {
+      state->complete(Result<Value>::failure(
+          Error(ErrorCode::shutdown, "session is shutting down", 0, 0,
+                id.value())));
+      return Request<Value>(state, std::function<void()>());
+    }
+
+    const std::function<void()> cancel = [weak, id] {
+      const std::shared_ptr<SessionCore> self = weak.lock();
+      if (self) {
+        self->cancel_operation(id);
+      }
+    };
+    return Request<Value>(state, cancel);
+  }
+
+  void cancel_operation(RequestId id) {
     const std::weak_ptr<SessionCore> weak = shared_from_this();
     post([weak, id] {
       const std::shared_ptr<SessionCore> self = weak.lock();
       if (!self) {
         return;
       }
-      std::map<int, PendingContract>::iterator iterator =
-          self->pending_contracts_.find(id.value());
-      if (iterator == self->pending_contracts_.end()) {
-        return;
-      }
-      try {
-        self->backend_->cancel_contract_details(id);
-      } catch (...) {
-      }
-      iterator->second.state->complete(
-          Result<std::vector<ContractDetails> >::failure(
-              Error(ErrorCode::cancelled, "request cancelled", 0, 0,
-                    id.value())));
-      self->pending_contracts_.erase(iterator);
+      Error error(ErrorCode::cancelled, "request cancelled", 0, 0,
+                  id.value());
+      error.scope = ErrorScope::request;
+      self->operations_.cancel(id, error);
     });
   }
 
   void expire_requests() {
-    const std::chrono::steady_clock::time_point now =
-        std::chrono::steady_clock::now();
-    std::map<int, PendingContract>::iterator iterator =
-        pending_contracts_.begin();
-    while (iterator != pending_contracts_.end()) {
-      if (iterator->second.deadline > now) {
-        ++iterator;
-        continue;
-      }
-      const int id = iterator->first;
-      try {
-        backend_->cancel_contract_details(RequestId(id));
-      } catch (...) {
-      }
-      iterator->second.state->complete(
-          Result<std::vector<ContractDetails> >::failure(
-              Error(ErrorCode::timeout, "request timed out", 0, 0, id)));
-      pending_contracts_.erase(iterator++);
-    }
-  }
-
-  void complete_contract_error(int id, const Error& error) {
-    std::map<int, PendingContract>::iterator iterator =
-        pending_contracts_.find(id);
-    if (iterator == pending_contracts_.end()) {
-      return;
-    }
-    iterator->second.state->complete(
-        Result<std::vector<ContractDetails> >::failure(error));
-    pending_contracts_.erase(iterator);
-  }
-
-  void fail_all_pending(const Error& error) {
-    for (std::map<int, PendingContract>::iterator iterator =
-             pending_contracts_.begin();
-         iterator != pending_contracts_.end(); ++iterator) {
-      iterator->second.state->complete(
-          Result<std::vector<ContractDetails> >::failure(error));
-    }
-    pending_contracts_.clear();
+    operations_.expire(std::chrono::steady_clock::now());
   }
 
   void set_state(SessionState value) {
@@ -530,11 +685,10 @@ class SessionCore : public RouterSink,
       try {
         (*iterator)(value);
       } catch (const std::exception& exception) {
-        publish_error(
-            Error(ErrorCode::callback_exception, exception.what()));
+        publish_error(callback_error(exception.what()));
       } catch (...) {
-        publish_error(Error(ErrorCode::callback_exception,
-                            "state listener threw an unknown exception"));
+        publish_error(callback_error(
+            "state listener threw an unknown exception"));
       }
     }
   }
@@ -589,7 +743,7 @@ class SessionCore : public RouterSink,
 
   std::mutex tasks_mutex_;
   std::deque<std::function<void()> > tasks_;
-  std::map<int, PendingContract> pending_contracts_;
+  OperationRegistry operations_;
 
   std::atomic<bool> stop_requested_;
   bool unexpected_disconnect_;
@@ -614,7 +768,17 @@ Result<std::shared_ptr<Session> > SessionFactory::connect(
       new SessionCore(std::move(backend)));
   core->configure(options);
   const std::shared_ptr<Session> session(new Session(core));
-  core->start();
+  try {
+    core->start();
+  } catch (const std::exception& exception) {
+    return Result<std::shared_ptr<Session> >::failure(connection_error(
+        ErrorCode::connection_failed,
+        std::string("could not start session thread: ") + exception.what()));
+  } catch (...) {
+    return Result<std::shared_ptr<Session> >::failure(connection_error(
+        ErrorCode::connection_failed,
+        "could not start session thread: unknown exception"));
+  }
   return core->wait_until_ready(options, session);
 }
 
@@ -701,6 +865,15 @@ Request<std::vector<ContractDetails> > Session::contract_details(
     const Contract& contract, const RequestOptions& options) {
   return core_ ? core_->contract_details(contract, options)
                : Request<std::vector<ContractDetails> >();
+}
+
+Request<std::vector<HistoricalBar> > Session::historical_bars(
+    const Contract& contract,
+    const HistoricalBarsOptions& historical_options,
+    const RequestOptions& request_options) {
+  return core_ ? core_->historical_bars(contract, historical_options,
+                                        request_options)
+               : Request<std::vector<HistoricalBar> >();
 }
 
 Subscription Session::on_state(

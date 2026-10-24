@@ -142,6 +142,8 @@ endif()
 
 add_library(ibapi4gu_api STATIC
   src/callback_router.cpp
+  src/error_classifier.cpp
+  src/historical_request.cpp
   src/session.cpp
   src/socket_backend.cpp
 )

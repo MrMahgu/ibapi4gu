@@ -137,7 +137,25 @@ Connection becomes ready only after `nextValidId`. Requests are cancellable,
 time out after 30 seconds by default, and cancel when abandoned. Raw calls can
 share the same serialized connection through `session->ibkr().post(...)`.
 See [`docs/session-api.md`](docs/session-api.md) for threading, ID allocation,
-raw observer, and Protobuf profile rules.
+historical bars, error classification, raw observer, and Protobuf profile
+rules.
+
+Historical bars are exposed as a finite normalized request:
+
+```cpp
+ibapi4gu::HistoricalBarsOptions history;
+history.duration = ibapi4gu::HistoricalDuration(
+    5, ibapi4gu::HistoricalDurationUnit::days);
+history.bar_size = ibapi4gu::HistoricalBarSize::five_minutes;
+
+ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > request =
+    connected.value()->historical_bars(ibapi4gu::Stock("AAPL"), history);
+ibapi4gu::Result<std::vector<ibapi4gu::HistoricalBar> > bars = request.get();
+```
+
+Automated historical-data tests use synthetic backend callbacks. A live TWS
+or IB Gateway check remains manual and requires the relevant IBKR market-data
+permissions.
 
 The manual `ibapi4gu_contract_details` example accepts `HOST PORT CLIENT_ID
 SYMBOL`. It is built with the examples but is intentionally not registered as

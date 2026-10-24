@@ -1,4 +1,5 @@
 #include "detail/backend.hpp"
+#include "detail/historical_request.hpp"
 
 #include <memory>
 #include <mutex>
@@ -113,6 +114,27 @@ class SocketBackend : public Backend {
   void cancel_contract_details(RequestId id) override {
     if (client_) {
       client_->cancelContractData(id.value());
+    }
+  }
+
+  void request_historical_bars(
+      RequestId id, const Contract& contract,
+      const HistoricalBarsOptions& options) override {
+    if (client_) {
+      client_->reqHistoricalData(
+          id.value(), to_ibkr_contract(contract),
+          format_historical_end_time(options),
+          format_historical_duration(options.duration),
+          format_historical_bar_size(options.bar_size),
+          format_historical_data_type(options.data_type),
+          options.regular_trading_hours_only ? 1 : 0, 2, false,
+          TagValueListSPtr());
+    }
+  }
+
+  void cancel_historical_bars(RequestId id) override {
+    if (client_) {
+      client_->cancelHistoricalData(id.value());
     }
   }
 

@@ -20,6 +20,8 @@ class RouterSink {
   virtual void on_contract_details(int request_id,
                                    const ::ContractDetails& details) = 0;
   virtual void on_contract_details_end(int request_id) = 0;
+  virtual void on_historical_bar(int request_id, const ::Bar& bar) = 0;
+  virtual void on_historical_bars_end(int request_id) = 0;
   virtual void on_error(int id, long long timestamp_ms, int code,
                         const std::string& message,
                         const std::string& advanced_reject_json) = 0;
@@ -69,6 +71,10 @@ class CallbackRouter : public EWrapper {
   void internal(bondContractDetails_tag, int request_id,
                 const ::ContractDetails& details);
   void internal(contractDetailsEnd_tag, int request_id);
+  void internal(historicalData_tag, int request_id, const ::Bar& bar);
+  void internal(historicalDataEnd_tag, int request_id,
+                const std::string& start_date,
+                const std::string& end_date);
   void internal(error_tag, int id, long long timestamp_ms, int code,
                 const std::string& message,
                 const std::string& advanced_reject_json);

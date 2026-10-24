@@ -33,6 +33,18 @@ void CallbackRouter::internal(contractDetailsEnd_tag, int request_id) {
   sink_.on_contract_details_end(request_id);
 }
 
+void CallbackRouter::internal(historicalData_tag, int request_id,
+                              const ::Bar& bar) {
+  sink_.on_callback("historicalData");
+  sink_.on_historical_bar(request_id, bar);
+}
+
+void CallbackRouter::internal(historicalDataEnd_tag, int request_id,
+                              const std::string&, const std::string&) {
+  sink_.on_callback("historicalDataEnd");
+  sink_.on_historical_bars_end(request_id);
+}
+
 void CallbackRouter::internal(error_tag, int id, long long timestamp_ms,
                               int code, const std::string& message,
                               const std::string& advanced_reject_json) {

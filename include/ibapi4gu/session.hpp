@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <ibapi4gu/contract.hpp>
+#include <ibapi4gu/historical.hpp>
 #include <ibapi4gu/request.hpp>
 #include <ibapi4gu/result.hpp>
 #include <ibapi4gu/types.hpp>
@@ -77,6 +78,12 @@ class Session : public std::enable_shared_from_this<Session> {
   Request<std::vector<ContractDetails> > contract_details(
       const Contract& contract,
       const RequestOptions& options = RequestOptions());
+
+  Request<std::vector<HistoricalBar> > historical_bars(
+      const Contract& contract,
+      const HistoricalBarsOptions& historical_options =
+          HistoricalBarsOptions(),
+      const RequestOptions& request_options = RequestOptions());
 
   Subscription on_state(
       const std::function<void(SessionState)>& listener);

@@ -37,11 +37,48 @@ inventing IDs can collide with work sharing the same session.
 
 ## Finite requests
 
-`contract_details()` returns a move-only request. `get()` blocks and returns a
-`Result<std::vector<ContractDetails>>`. Its timeout defaults to 30 seconds.
-Explicit `cancel()`, timeout, a matching IBKR error, disconnect, or shutdown
-completes the result with an `Error`. Destroying a request before `get()`
-cancels it. Callbacks arriving after completion are ignored.
+`contract_details()` and `historical_bars()` return move-only requests.
+`get()` blocks and returns a `Result<T>`. The timeout defaults to 30 seconds.
+Explicit `cancel()`, timeout, a matching terminal IBKR request error,
+disconnect, or shutdown completes the result with an `Error`. Destroying a
+request before `get()` cancels it. Callbacks arriving after completion are
+ignored.
+
+Finite operations share one internal registry for request IDs, deadlines,
+cancellation, failure, disconnect, and late-callback suppression. A typed
+operation accepts only its own callback rows, so concurrent operation types
+cannot cross-correlate even if a callback contains an unexpected ID.
+
+`historical_bars()` is deliberately finite: it always sends
+`keepUpToDate=false`. `HistoricalBarsOptions` uses typed duration, bar-size,
+and data-type values. An empty end time requests data ending at the current
+moment; a supplied `std::chrono::system_clock::time_point` is sent in UTC.
+Volume and weighted-average price use `DecimalValue`, a lossless textual
+representation that does not expose IBKR's decimal implementation. Intraday
+bar times are returned as epoch text and day-or-longer bar times retain the
+calendar value supplied by IBKR.
+
+Historical data availability and pacing remain IBKR/account dependent. This
+operation does not retry automatically.
+
+## Error classification
+
+IBKR multiplexes failures, warnings, connectivity changes, and normal farm
+status notifications through `EWrapper::error`. `Error` preserves the IBKR
+code, timestamp, related ID, and advanced order-reject JSON, and adds:
+
+- `severity`: information, warning, error, or fatal;
+- `scope`: request, order, connection, account, or a specific data farm; and
+- `terminal`: whether the event ends work in that scope.
+
+Only terminal request-scoped errors fail a correlated finite request. Market,
+historical, and security-definition farm status messages are published to
+error listeners but do not complete requests. Fatal connection errors fail
+connection establishment immediately rather than waiting for the connect
+timeout. Backend connection exceptions become fatal `connection_failed`
+results, polling exceptions become fatal connection-scoped `backend_failure`
+results, and disconnect cleanup exceptions are published as non-terminal
+backend errors. The classifier does not perform automatic reconnect or replay.
 
 ## Raw interoperability
 
@@ -57,3 +94,11 @@ and its converted traditional counterpart for the same message.
 The Unix and Windows generated Protobuf trees are separate build profiles.
 Their generated symbols overlap and their runtime versions differ, so two
 profiles cannot be linked into or loaded by one process.
+
+## Validation boundary
+
+Session and historical-data behavior is tested with the private backend seam
+and synthetic callbacks. Live TWS/IB Gateway tests are manual and opt-in; the
+historical operation is not represented as end-to-end verified until that
+testing is available. Synthetic fixtures are not described as captured IBKR
+traffic.

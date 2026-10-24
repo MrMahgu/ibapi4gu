@@ -5,6 +5,7 @@
 
 #include <ibapi4gu/contract.hpp>
 #include <ibapi4gu/error.hpp>
+#include <ibapi4gu/historical.hpp>
 #include <ibapi4gu/result.hpp>
 #include <ibapi4gu/session.hpp>
 #include <ibapi4gu/types.hpp>
@@ -29,6 +30,10 @@ class Backend {
   virtual void request_contract_details(RequestId id,
                                         const Contract& contract) = 0;
   virtual void cancel_contract_details(RequestId id) = 0;
+  virtual void request_historical_bars(
+      RequestId id, const Contract& contract,
+      const HistoricalBarsOptions& options) = 0;
+  virtual void cancel_historical_bars(RequestId id) = 0;
   virtual void raw_call(const std::function<void(EClient&)>& function) = 0;
 };
 

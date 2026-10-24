@@ -20,12 +20,16 @@
 
 #include <Contract.h>
 #include <ContractData.pb.h>
+#include <Decimal.h>
 #include <EClient.h>
 #include <ETransport.h>
 #include <EWrapper.h>
+#include <bar.h>
 
 #include "detail/backend.hpp"
 #include "detail/callback_router.hpp"
+#include "detail/historical_request.hpp"
+#include "detail/operation_registry.hpp"
 
 namespace {
 
@@ -47,9 +51,18 @@ struct Controller {
     std::string symbol;
   };
 
+  struct SentHistoricalRequest {
+    int id;
+    std::string symbol;
+    ibapi4gu::HistoricalBarsOptions options;
+  };
+
   explicit Controller(bool ready = true)
       : auto_ready(ready),
         connected(false),
+        throw_on_connect(false),
+        throw_on_poll(false),
+        throw_on_disconnect(false),
         wake_requested(false),
         wrapper(NULL),
         raw_calls(0) {}
@@ -72,6 +85,23 @@ struct Controller {
     return requests[index].id;
   }
 
+  int wait_for_historical_request(std::size_t index) {
+    std::unique_lock<std::mutex> lock(mutex);
+    require(condition.wait_for(lock, std::chrono::seconds(2),
+                               [this, index] {
+                                 return historical_requests.size() > index;
+                               }),
+            "timed out waiting for a historical request");
+    return historical_requests[index].id;
+  }
+
+  void wait_for_wrapper() {
+    std::unique_lock<std::mutex> lock(mutex);
+    require(condition.wait_for(lock, std::chrono::seconds(2),
+                               [this] { return wrapper != NULL; }),
+            "timed out waiting for backend connection");
+  }
+
   void wait_for_cancellations(std::size_t count) {
     std::unique_lock<std::mutex> lock(mutex);
     require(condition.wait_for(lock, std::chrono::seconds(2),
@@ -81,8 +111,21 @@ struct Controller {
             "timed out waiting for cancellation");
   }
 
+  void wait_for_historical_cancellations(std::size_t count) {
+    std::unique_lock<std::mutex> lock(mutex);
+    require(condition.wait_for(lock, std::chrono::seconds(2),
+                               [this, count] {
+                                 return historical_cancellations.size() >=
+                                        count;
+                               }),
+            "timed out waiting for historical cancellation");
+  }
+
   bool auto_ready;
   std::atomic<bool> connected;
+  bool throw_on_connect;
+  std::atomic<bool> throw_on_poll;
+  std::atomic<bool> throw_on_disconnect;
   bool wake_requested;
   EWrapper* wrapper;
   std::mutex mutex;
@@ -90,6 +133,8 @@ struct Controller {
   std::deque<std::function<void(EWrapper&)> > events;
   std::vector<SentRequest> requests;
   std::vector<int> cancellations;
+  std::vector<SentHistoricalRequest> historical_requests;
+  std::vector<int> historical_cancellations;
   std::atomic<int> raw_calls;
 };
 
@@ -121,6 +166,9 @@ class FakeBackend : public ibapi4gu::detail::Backend {
 
   bool connect(const ibapi4gu::SessionOptions&, EWrapper* wrapper,
                ibapi4gu::Error&) override {
+    if (controller_->throw_on_connect) {
+      throw std::runtime_error("connect exploded");
+    }
     client_.reset(new FakeClient(wrapper));
     {
       std::lock_guard<std::mutex> lock(controller_->mutex);
@@ -135,6 +183,9 @@ class FakeBackend : public ibapi4gu::detail::Backend {
   }
 
   void poll() override {
+    if (controller_->throw_on_poll.exchange(false)) {
+      throw std::runtime_error("poll exploded");
+    }
     std::function<void(EWrapper&)> event;
     {
       std::unique_lock<std::mutex> lock(controller_->mutex);
@@ -165,6 +216,9 @@ class FakeBackend : public ibapi4gu::detail::Backend {
   void disconnect() override {
     controller_->connected.store(false);
     wake();
+    if (controller_->throw_on_disconnect.exchange(false)) {
+      throw std::runtime_error("disconnect exploded");
+    }
   }
 
   bool connected() const override { return controller_->connected.load(); }
@@ -185,6 +239,28 @@ class FakeBackend : public ibapi4gu::detail::Backend {
     {
       std::lock_guard<std::mutex> lock(controller_->mutex);
       controller_->cancellations.push_back(id.value());
+    }
+    controller_->condition.notify_all();
+  }
+
+  void request_historical_bars(
+      RequestId id, const ibapi4gu::Contract& contract,
+      const ibapi4gu::HistoricalBarsOptions& options) override {
+    {
+      std::lock_guard<std::mutex> lock(controller_->mutex);
+      Controller::SentHistoricalRequest request;
+      request.id = id.value();
+      request.symbol = contract.symbol;
+      request.options = options;
+      controller_->historical_requests.push_back(request);
+    }
+    controller_->condition.notify_all();
+  }
+
+  void cancel_historical_bars(RequestId id) override {
+    {
+      std::lock_guard<std::mutex> lock(controller_->mutex);
+      controller_->historical_cancellations.push_back(id.value());
     }
     controller_->condition.notify_all();
   }
@@ -223,6 +299,60 @@ struct Fixture {
   return details;
 }
 
+::Bar historical_row(const std::string& time, double close,
+                     const std::string& volume) {
+  ::Bar bar;
+  bar.time = time;
+  bar.open = close - 1.0;
+  bar.high = close + 1.0;
+  bar.low = close - 2.0;
+  bar.close = close;
+  bar.volume = DecimalFunctions::stringToDecimal(volume);
+  bar.wap = DecimalFunctions::stringToDecimal("123.456");
+  bar.count = 17;
+  return bar;
+}
+
+void test_generic_value_operation_and_wire_formatting() {
+  const std::shared_ptr<ibapi4gu::detail::RequestState<int> > state(
+      new ibapi4gu::detail::RequestState<int>());
+  ibapi4gu::detail::OperationRegistry registry;
+  const std::shared_ptr<ibapi4gu::detail::ValueOperation<int> > operation(
+      new ibapi4gu::detail::ValueOperation<int>(
+          RequestId(77),
+          std::chrono::steady_clock::now() + std::chrono::seconds(1),
+          std::function<void(RequestId)>(), state));
+  require(registry.add(operation), "one-value operation was not registered");
+  const std::shared_ptr<ibapi4gu::detail::ValueOperation<int> > taken =
+      registry.take<ibapi4gu::detail::ValueOperation<int> >(RequestId(77));
+  require(taken && registry.size() == 0,
+          "one-value operation was not removed by type");
+  taken->succeed(42);
+  const Result<int> value = state->wait();
+  require(value && value.value() == 42,
+          "one-value operation did not complete its request state");
+
+  require(ibapi4gu::detail::format_historical_duration(
+              ibapi4gu::HistoricalDuration(
+                  3, ibapi4gu::HistoricalDurationUnit::weeks)) == "3 W" &&
+              ibapi4gu::detail::format_historical_bar_size(
+                  ibapi4gu::HistoricalBarSize::eight_hours) == "8 hours" &&
+              ibapi4gu::detail::format_historical_data_type(
+                  ibapi4gu::HistoricalDataType::aggregate_trades) ==
+                  "AGGTRADES",
+          "typed historical options did not map to IBKR wire values");
+
+  ibapi4gu::HistoricalBarsOptions current;
+  require(ibapi4gu::detail::format_historical_end_time(current).empty(),
+          "current historical end time was not empty");
+  ibapi4gu::HistoricalBarsOptions epoch;
+  epoch.end_at_current_time = false;
+  epoch.end_time = std::chrono::system_clock::from_time_t(0);
+  require(ibapi4gu::detail::format_historical_end_time(epoch) ==
+              "19700101-00:00:00",
+          "historical end time was not formatted as UTC");
+}
+
 void test_connection_waits_for_traditional_next_valid_id() {
   Fixture fixture(false);
   std::future<Result<std::shared_ptr<Session> > > future =
@@ -242,6 +372,82 @@ void test_connection_waits_for_traditional_next_valid_id() {
   require(result.value()->reserve_order_id().value() == 700,
           "order allocator was not seeded from nextValidId");
   result.value()->shutdown();
+}
+
+void test_fatal_connection_error_finishes_connect() {
+  const int fatal_codes[] = {326, 505, 506, 507, 508, 509, 520};
+  for (std::size_t index = 0;
+       index != sizeof(fatal_codes) / sizeof(fatal_codes[0]); ++index) {
+    Fixture fixture(false);
+    std::future<Result<std::shared_ptr<Session> > > future =
+        std::async(std::launch::async,
+                   [&fixture] { return fixture.connect(); });
+    fixture.controller->wait_for_wrapper();
+    const int code = fatal_codes[index];
+    fixture.controller->emit([code](EWrapper& wrapper) {
+      wrapper.error(-1, 456, code, "fatal connection failure", "");
+    });
+
+    require(future.wait_for(std::chrono::milliseconds(500)) ==
+                std::future_status::ready,
+            "fatal connection error waited for the connection timeout");
+    const Result<std::shared_ptr<Session> > result = future.get();
+    require(!result && result.error().code == ErrorCode::connection_failed &&
+                result.error().severity == ibapi4gu::ErrorSeverity::fatal &&
+                result.error().scope == ibapi4gu::ErrorScope::connection &&
+                result.error().terminal && result.error().ibkr_code == code,
+            "fatal connection error was not classified");
+  }
+}
+
+void test_backend_exceptions_are_contained() {
+  {
+    Fixture fixture;
+    fixture.controller->throw_on_connect = true;
+    const Result<std::shared_ptr<Session> > result = fixture.connect();
+    require(!result && result.error().code == ErrorCode::connection_failed &&
+                result.error().scope == ibapi4gu::ErrorScope::connection &&
+                result.error().terminal,
+            "backend connect exception escaped the session result");
+  }
+
+  {
+    Fixture fixture;
+    Result<std::shared_ptr<Session> > connected = fixture.connect();
+    require(connected.has_value(), "session did not connect");
+    std::shared_ptr<Session> session = connected.value();
+    ibapi4gu::Request<std::vector<ContractDetails> > request =
+        session->contract_details(ibapi4gu::Stock("POLL"));
+    fixture.controller->wait_for_request(0);
+    fixture.controller->throw_on_poll.store(true);
+    fixture.controller->emit([](EWrapper&) {});
+    const Result<std::vector<ContractDetails> > result = request.get();
+    require(!result && result.error().code == ErrorCode::backend_failure &&
+                result.error().severity == ibapi4gu::ErrorSeverity::fatal &&
+                result.error().scope == ibapi4gu::ErrorScope::connection &&
+                result.error().terminal,
+            "backend poll exception did not fail pending operations");
+    session->shutdown();
+  }
+
+  {
+    Fixture fixture;
+    Result<std::shared_ptr<Session> > connected = fixture.connect();
+    require(connected.has_value(), "session did not connect");
+    std::shared_ptr<Session> session = connected.value();
+    std::atomic<int> disconnect_errors(0);
+    ibapi4gu::Subscription errors = session->on_error(
+        [&disconnect_errors](const ibapi4gu::Error& error) {
+          if (error.code == ErrorCode::backend_failure && !error.terminal) {
+            ++disconnect_errors;
+          }
+        });
+    fixture.controller->throw_on_disconnect.store(true);
+    session->shutdown();
+    require(session->state() == ibapi4gu::SessionState::disconnected &&
+                disconnect_errors.load() == 1,
+            "backend disconnect exception escaped shutdown");
+  }
 }
 
 void test_concurrent_contract_details_are_correlated() {
@@ -339,6 +545,164 @@ void test_empty_error_timeout_cancel_abandon_and_late_callbacks() {
     fixture.controller->wait_for_request(4);
   }
   fixture.controller->wait_for_cancellations(3);
+}
+
+void test_historical_bars_and_generic_operation_registry() {
+  Fixture fixture;
+  Result<std::shared_ptr<Session> > connected = fixture.connect();
+  require(connected.has_value(), "session did not connect");
+  std::shared_ptr<Session> session = connected.value();
+
+  std::mutex error_mutex;
+  std::condition_variable error_condition;
+  std::vector<ibapi4gu::Error> errors;
+  ibapi4gu::Subscription error_subscription = session->on_error(
+      [&error_mutex, &error_condition, &errors](const ibapi4gu::Error& error) {
+        std::lock_guard<std::mutex> lock(error_mutex);
+        errors.push_back(error);
+        error_condition.notify_all();
+      });
+
+  ibapi4gu::HistoricalBarsOptions options;
+  options.duration = ibapi4gu::HistoricalDuration(
+      3, ibapi4gu::HistoricalDurationUnit::days);
+  options.bar_size = ibapi4gu::HistoricalBarSize::five_minutes;
+  options.data_type = ibapi4gu::HistoricalDataType::midpoint;
+  options.regular_trading_hours_only = false;
+
+  ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > history =
+      session->historical_bars(ibapi4gu::Stock("AAPL"), options);
+  ibapi4gu::Request<std::vector<ContractDetails> > contract =
+      session->contract_details(ibapi4gu::Stock("MSFT"));
+  const int history_id = fixture.controller->wait_for_historical_request(0);
+  const int contract_id = fixture.controller->wait_for_request(0);
+
+  {
+    std::lock_guard<std::mutex> lock(fixture.controller->mutex);
+    const Controller::SentHistoricalRequest& sent =
+        fixture.controller->historical_requests[0];
+    require(sent.symbol == "AAPL" && sent.options.duration.count == 3 &&
+                sent.options.bar_size ==
+                    ibapi4gu::HistoricalBarSize::five_minutes &&
+                sent.options.data_type ==
+                    ibapi4gu::HistoricalDataType::midpoint &&
+                !sent.options.regular_trading_hours_only,
+            "historical request options were not preserved");
+  }
+
+  // Farm status notifications use the error channel but must not terminate a
+  // request, even if a synthetic event happens to carry the same numeric ID.
+  fixture.controller->emit([history_id](EWrapper& wrapper) {
+    wrapper.error(history_id, 1000, 2106,
+                  "historical data farm connection is OK", "");
+  });
+  fixture.controller->emit([history_id](EWrapper& wrapper) {
+    wrapper.error(history_id, 1001, 201, "raw order rejected",
+                  "{\"reason\":\"test\"}");
+  });
+  fixture.controller->emit([history_id](EWrapper& wrapper) {
+    wrapper.error(history_id, 1002, 2109,
+                  "order attribute ignored; order processed", "");
+  });
+  const ::Bar first = historical_row("1700000000", 125.0, "1000000000000");
+  const ::Bar second = historical_row("1700000300", 126.0, "42.5");
+  fixture.controller->emit([history_id, first](EWrapper& wrapper) {
+    wrapper.historicalData(history_id, first);
+  });
+  fixture.controller->emit([contract_id](EWrapper& wrapper) {
+    wrapper.contractDetailsEnd(contract_id);
+  });
+  fixture.controller->emit([history_id, second](EWrapper& wrapper) {
+    wrapper.historicalData(history_id, second);
+    wrapper.historicalDataEnd(history_id, "start", "end");
+  });
+
+  const Result<std::vector<ContractDetails> > contract_result = contract.get();
+  const Result<std::vector<ibapi4gu::HistoricalBar> > history_result =
+      history.get();
+  require(contract_result && contract_result.value().empty(),
+          "mixed operation type did not complete independently");
+  require(history_result && history_result.value().size() == 2 &&
+              history_result.value()[0].time == "1700000000" &&
+              history_result.value()[0].close == 125.0 &&
+              history_result.value()[0].volume.is_set() &&
+              history_result.value()[0].volume.value() == "1000000000000" &&
+              history_result.value()[1].weighted_average_price.value() ==
+                  "123.456" &&
+              history_result.value()[1].trade_count == 17,
+          "historical bars were not normalized losslessly");
+
+  {
+    std::unique_lock<std::mutex> lock(error_mutex);
+    require(error_condition.wait_for(lock, std::chrono::seconds(2), [&errors] {
+              return !errors.empty();
+            }),
+            "farm status was not published");
+    require(errors[0].code == ErrorCode::ibkr_notice &&
+                errors[0].severity ==
+                    ibapi4gu::ErrorSeverity::information &&
+                errors[0].scope ==
+                    ibapi4gu::ErrorScope::historical_data_farm &&
+                !errors[0].terminal,
+            "farm status was classified as a request failure");
+    require(errors.size() >= 2 &&
+                errors[1].scope == ibapi4gu::ErrorScope::order &&
+                errors[1].terminal &&
+                errors[1].advanced_reject_json ==
+                    "{\"reason\":\"test\"}",
+            "order error was not kept out of request correlation");
+    require(errors.size() >= 3 &&
+                errors[2].code == ErrorCode::ibkr_warning &&
+                errors[2].severity == ibapi4gu::ErrorSeverity::warning &&
+                errors[2].scope == ibapi4gu::ErrorScope::order &&
+                !errors[2].terminal,
+            "order warning was classified as a terminal error");
+  }
+
+  ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > failed =
+      session->historical_bars(ibapi4gu::Stock("BAD"));
+  const int failed_id = fixture.controller->wait_for_historical_request(1);
+  fixture.controller->emit([failed_id](EWrapper& wrapper) {
+    wrapper.error(failed_id, 1001, 162, "historical service error", "");
+  });
+  const Result<std::vector<ibapi4gu::HistoricalBar> > failed_result =
+      failed.get();
+  require(!failed_result &&
+              failed_result.error().code == ErrorCode::request_failed &&
+              failed_result.error().scope == ibapi4gu::ErrorScope::request &&
+              failed_result.error().terminal,
+          "terminal historical error did not fail its operation");
+
+  ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > timed_out =
+      session->historical_bars(
+          ibapi4gu::Stock("SLOW"), ibapi4gu::HistoricalBarsOptions(),
+          ibapi4gu::RequestOptions(std::chrono::milliseconds(20)));
+  fixture.controller->wait_for_historical_request(2);
+  const Result<std::vector<ibapi4gu::HistoricalBar> > timeout_result =
+      timed_out.get();
+  require(!timeout_result && timeout_result.error().code == ErrorCode::timeout,
+          "historical timeout did not use generic operation expiry");
+
+  ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > cancelled =
+      session->historical_bars(ibapi4gu::Stock("CANCEL"));
+  fixture.controller->wait_for_historical_request(3);
+  cancelled.cancel();
+  const Result<std::vector<ibapi4gu::HistoricalBar> > cancelled_result =
+      cancelled.get();
+  require(!cancelled_result &&
+              cancelled_result.error().code == ErrorCode::cancelled,
+          "historical cancellation did not use generic operation registry");
+  fixture.controller->wait_for_historical_cancellations(2);
+
+  ibapi4gu::HistoricalBarsOptions invalid_options;
+  invalid_options.duration.count = 0;
+  ibapi4gu::Request<std::vector<ibapi4gu::HistoricalBar> > invalid =
+      session->historical_bars(ibapi4gu::Stock("INVALID"), invalid_options);
+  const Result<std::vector<ibapi4gu::HistoricalBar> > invalid_result =
+      invalid.get();
+  require(!invalid_result &&
+              invalid_result.error().code == ErrorCode::invalid_operation,
+          "invalid historical duration was not rejected locally");
 }
 
 class CountingObserver : public ibapi4gu::detail::EWrapperAdapter {
@@ -568,12 +932,20 @@ static_assert(proto_callback_count == 81,
 int main() {
   typedef void (*Test)();
   const std::pair<const char*, Test> tests[] = {
+      std::make_pair("generic value operation",
+                     &test_generic_value_operation_and_wire_formatting),
       std::make_pair("connection readiness",
                      &test_connection_waits_for_traditional_next_valid_id),
+      std::make_pair("connection error classification",
+                     &test_fatal_connection_error_finishes_connect),
+      std::make_pair("backend exception containment",
+                     &test_backend_exceptions_are_contained),
       std::make_pair("request correlation",
                      &test_concurrent_contract_details_are_correlated),
       std::make_pair("finite request outcomes",
                      &test_empty_error_timeout_cancel_abandon_and_late_callbacks),
+      std::make_pair("historical operation registry",
+                     &test_historical_bars_and_generic_operation_registry),
       std::make_pair("raw callback routing",
                      &test_raw_callbacks_and_normalized_deduplication),
       std::make_pair("raw queue and allocators",
